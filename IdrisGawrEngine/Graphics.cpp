@@ -14,16 +14,31 @@
 #include <set>
 
 #ifdef _DEBUG
-#define VK_ASSERT(x) {							\
-	VkResult res = x; if (res != VK_SUCCESS)	\
-		std::cout << "[Vulkan Error]"			\
-		<< "line : "<< __LINE__ << " - "		\
-		<< string_VkResult(res) << std::endl; }
+#define VK_ASSERT(x) {								\
+	VkResult res = x; if (res != VK_SUCCESS) {		\
+		std::cerr << "[Vulkan Error]" << "line : "	\
+		<< __LINE__ << " - "						\
+		<< string_VkResult(res) << std::endl;		\
+		throw std::exception();						\
+		}											\
+	}						
+		
+		
 #else
 #define VK_CHECK(x) x
 #endif
 
 #define DEFAULT_GPU 1
+#define MAX_FRAMES_IN_FLIGHT 1
+
+struct callback
+{
+	static void frameBufferSizeCallback(GLFWwindow* wnd, int width, int height) {
+		auto app = reinterpret_cast<Graphics*>(glfwGetWindowUserPointer(wnd));
+		app->m_framebufferResized = true;
+	}
+};
+
 
 Graphics::Graphics(const char* title) : m_title(title)
 {
@@ -34,42 +49,29 @@ Graphics::Graphics(const char* title) : m_title(title)
 	queryInstanceExtensions();
 	createInstance();
 
-
 	// create device
-	//		enumerate gpus on the system
-	//		enumerate device layer extensions
-	//		enable extensions for device
-	//		create device object
-	getPhysicalDevice();
-	queryPhysicalDeviceValidationLayer();
-	queryPhysicalDeviceExtensions();
-	createLogicalDevice();
-
+	getPhysicalDevice();					// enumerate gpus on the system
+	queryPhysicalDeviceValidationLayer();	// check device validation layers
+	queryPhysicalDeviceExtensions();		// check device extensions
+	createLogicalDevice();					// create device object
 
 	// create presentation swapchain
-	//		create a native empty window
-	//		create surface (wsi extension VK_KHR_SURFACE)
-	//		find graphics queue with presentation support
-	//		query surface formats and store them in array
-	createWindow(800, 600);
-	createSurface();
-	createSwapChain();
-	createSwapChainImages();
-	
+	createWindow(800, 600);	// create a native empty window
+	createSurface();		// create surface (wsi extension VK_KHR_SURFACE)
+	createSwapChain();		// create swapchain 
+	createImageViews();// create swapchain image views
+
+	// get queues for render pass
 	vkGetDeviceQueue(m_logicalDevice, getQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT), 0, &m_graphicsQueue);
 	vkGetDeviceQueue(m_logicalDevice, getQueueFamilyIndexPresent(), 0, &m_presentQueue);
-
+	
 	createRenderPass();
 	createFramebuffer();
 
-	
 	createCommandPool();
 	createCommandBuffer();
 
-
-	std::string vertFilepath = "Resources/shader.vert.spv";
-	std::string fragFilepath = "Resources/shader.frag.spv";
-	createPipeline(vertFilepath, fragFilepath);
+	createGraphicsPipeline();
 	createSyncObjects();
 
 	mainloop();
@@ -77,10 +79,11 @@ Graphics::Graphics(const char* title) : m_title(title)
 
 Graphics::~Graphics()
 {
-	vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphore, nullptr);
-	vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphore, nullptr);
-	vkDestroyFence(m_logicalDevice, m_inFlightFence, nullptr);
-
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+		vkDestroySemaphore(m_logicalDevice, m_imageAvailableSemaphore[i], nullptr);
+		vkDestroySemaphore(m_logicalDevice, m_renderFinishedSemaphore[i], nullptr);
+		vkDestroyFence(m_logicalDevice, m_inFlightFence[i], nullptr);
+	}
 
 	vkDestroyCommandPool(m_logicalDevice, m_cmdPool, nullptr);
 	
@@ -103,10 +106,11 @@ Graphics::~Graphics()
 	vkDestroyInstance(m_instance, nullptr);
 }
 
-// requires:
-//		validation layers
 void Graphics::queryInstanceValidationLayer()
 {
+// requires:
+//		validation layers
+
 #if defined(_DEBUG)
 	// check validation layer support
 	uint32_t layerCount;
@@ -126,10 +130,11 @@ void Graphics::queryInstanceValidationLayer()
 #endif
 }
 
-// requires:
-//		instance extensions
 void Graphics::queryInstanceExtensions()
 {
+// requires:
+//		instance extensions
+
 	uint32_t extensionCount;
 	VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr));
 
@@ -144,13 +149,15 @@ void Graphics::queryInstanceExtensions()
 			throw std::runtime_error("gpu doesnt support required extensions");
 	}
 }
+
+void Graphics::createInstance()
+{
 // requires:
 //		instance extensions
 //		validation layers
 //		m_title
 //		m_instance
-void Graphics::createInstance()
-{
+
 	uint32_t glfwExtensionCount;
 	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 	
@@ -184,12 +191,11 @@ void Graphics::createInstance()
 	VK_ASSERT(vkCreateInstance(&instanceInfo, nullptr, &m_instance));
 }
 
-
-// requires:
-//		m_instance
-//		m_physical device
 void Graphics::getPhysicalDevice()
 {
+	// requires:
+	//		m_instance
+	//		m_physical device
 	uint32_t deviceCount = 0;
 	VK_ASSERT(vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr));
 
@@ -203,11 +209,11 @@ void Graphics::getPhysicalDevice()
 	m_physicalDevice = devices[DEFAULT_GPU];
 }
 
+void Graphics::queryPhysicalDeviceValidationLayer()
+{
 // requires:
 //		m_physicalDevice
 //		validation layers
-void Graphics::queryPhysicalDeviceValidationLayer()
-{
 #if defined(_DEBUG)
 	// check validation layer support
 	uint32_t layerCount;
@@ -227,11 +233,11 @@ void Graphics::queryPhysicalDeviceValidationLayer()
 #endif
 }
 
+void Graphics::queryPhysicalDeviceExtensions()
+{
 // requires:
 //		m_physicalDevice
 //		deviceExtensions
-void Graphics::queryPhysicalDeviceExtensions()
-{
 	uint32_t extensionCount;
 	VK_ASSERT(vkEnumerateDeviceExtensionProperties(m_physicalDevice, nullptr, &extensionCount, nullptr));
 
@@ -247,14 +253,13 @@ void Graphics::queryPhysicalDeviceExtensions()
 	}
 }
 
+void Graphics::createLogicalDevice()
+{
 // requires:
 //		m_physicalDevice
 //		deviceExtensions
 //		validationLayers
 //		m_logical_device
-void Graphics::createLogicalDevice()
-{
-	
 	VkPhysicalDeviceFeatures deviceFeatures{};
 	{
 		vkGetPhysicalDeviceFeatures(m_physicalDevice, &deviceFeatures);
@@ -290,10 +295,11 @@ void Graphics::createLogicalDevice()
 	VK_ASSERT(vkCreateDevice(m_physicalDevice, &deviceInfo, nullptr, &m_logicalDevice));
 }
 
-// requires:
-//		m_physicalDevice
 uint32_t Graphics::getQueueFamilyIndex(VkQueueFlagBits flag)
 {
+// requires:
+//		m_physicalDevice
+
 	uint32_t queueFamilyCount;
 	vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueFamilyCount, nullptr);
 
@@ -307,11 +313,12 @@ uint32_t Graphics::getQueueFamilyIndex(VkQueueFlagBits flag)
 	throw std::runtime_error("device doesn't support queue family for flag");
 }
 
+uint32_t Graphics::getQueueFamilyIndexPresent()
+{
 // requires:
 //		m_physicalDevice
 //		m_surface
-uint32_t Graphics::getQueueFamilyIndexPresent()
-{
+
 	uint32_t queueFamilyCount;
 	vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueFamilyCount, nullptr);
 
@@ -339,25 +346,27 @@ uint32_t Graphics::getQueueFamilyIndexPresent()
 		throw std::runtime_error("no queue family on the gpu supports presentation");
 }
 
-
-
-
+void Graphics::createWindow(int width, int height)
+{
 // requires:
 //		m_window
 //		m_title
-void Graphics::createWindow(int width, int height)
-{
+	
 	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	glfwWindowHint(GLFW_RESIZABLE, GL_FALSE); // for now -> complicated
+	//glfwWindowHint(GLFW_RESIZABLE, GL_FALSE); // for now -> complicated
 	m_window = glfwCreateWindow(800, 600, m_title, nullptr, nullptr);
+
+	glfwSetWindowUserPointer(m_window, this);
+	glfwSetFramebufferSizeCallback(m_window, callback::frameBufferSizeCallback);
+
 }
 
+void Graphics::createSurface()
+{
 // requires:
 //		m_instance
 //		m_window
 //		m_surface
-void Graphics::createSurface()
-{
 	VkWin32SurfaceCreateInfoKHR surfaceInfo{};
 	{
 		surfaceInfo.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
@@ -368,14 +377,14 @@ void Graphics::createSurface()
 	VK_ASSERT(glfwCreateWindowSurface(m_instance, m_window, nullptr, &m_surface));
 }
 
+void Graphics::createSwapChain()
+{
 // requires:
 //		m_physicalDevice
 //		m_surface
 //		m_logicalDevice
 //		m_swapChain
 //		m_swapChainFormat
-void Graphics::createSwapChain()
-{
 	VkSurfaceCapabilitiesKHR capabilities{};
 	{
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physicalDevice, m_surface, &capabilities);
@@ -413,7 +422,7 @@ void Graphics::createSwapChain()
 
 	std::vector<uint32_t> queueFamilyIndices{};
 	{
-		std::set<uint32_t> uniqueIndices{
+		std::set<uint32_t> uniqueIndices {
 			getQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT),
 			getQueueFamilyIndexPresent()
 		};
@@ -472,6 +481,9 @@ void Graphics::createSwapChain()
 	
 	VK_ASSERT(vkCreateSwapchainKHR(m_logicalDevice, &swapChainInfo, nullptr, &m_swapChain));
 }
+
+void Graphics::createImageViews() 
+{
 // requires:
 //		m_physicalDevice
 //		m_surface
@@ -479,8 +491,7 @@ void Graphics::createSwapChain()
 //		m_swapChain
 //		m_swapChainImages
 //		m_swapChainImageViews
-void Graphics::createSwapChainImages() 
-{
+
 	uint32_t imageCount;
 	vkGetSwapchainImagesKHR(m_logicalDevice, m_swapChain, &imageCount, nullptr);
 	
@@ -514,12 +525,12 @@ void Graphics::createSwapChainImages()
 	}
 }
 
-
-
-// requires:
-//		m_logicalDevice
 void Graphics::createRenderPass()
 {
+// requires:
+//		m_logicalDevice
+//		m_swapChainFormat
+//		m_renderPass
 	VkAttachmentDescription colourAttachment{};
 	{
 		colourAttachment.format = m_swapChainFormat;
@@ -545,7 +556,6 @@ void Graphics::createRenderPass()
 		subpass.pColorAttachments = &attachmentRef;
 	}
 
-
 	VkSubpassDependency dependency{};
 	{
 		dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -569,14 +579,12 @@ void Graphics::createRenderPass()
 	}
 
 	VK_ASSERT(vkCreateRenderPass(m_logicalDevice, &renderInfo, nullptr, &m_renderPass));
-
 }
 
-
-// requires:
-//		m_logicalDevice
 VkShaderModule Graphics::loadShader(std::string& filepath)
 {
+// requires:
+//		m_logicalDevice
 	std::ifstream file(filepath, std::ios::ate | std::ios::binary);
 
 	if (!file.is_open())
@@ -600,8 +608,16 @@ VkShaderModule Graphics::loadShader(std::string& filepath)
 	return shader;
 }
 
-void Graphics::createPipeline(std::string& vertFilepath, std::string& fragFilepath)
+void Graphics::createGraphicsPipeline()
 {
+// requires:
+//		m_swapChainExtent
+//		m_pipelineLayout
+//		m_renderPass
+//		m_graphicsPipeline
+	std::string vertFilepath = "Resources/shader.vert.spv";
+	std::string fragFilepath = "Resources/shader.frag.spv";
+
 	VkShaderModule vertModule = loadShader(vertFilepath);
 	
 	VkPipelineShaderStageCreateInfo vertStageInfo{};
@@ -750,7 +766,7 @@ void Graphics::createPipeline(std::string& vertFilepath, std::string& fragFilepa
 		dynamicStateInfo.pDynamicStates = dynamicStates.data();
 	}
 
-	// setup pipelineLayout
+	// setup pipelineLayout for uniforms
 	{
 
 	}
@@ -794,14 +810,15 @@ void Graphics::createPipeline(std::string& vertFilepath, std::string& fragFilepa
 	vkDestroyShaderModule(m_logicalDevice, vertModule, nullptr);
 	vkDestroyShaderModule(m_logicalDevice, fragModule, nullptr);
 }
+
+void Graphics::createFramebuffer()
+{
 // requires:
 //		m_renderpass
 //		m_swapChainImageView
 //		m_swapChainFramebuffers
 //		m_logicalDevice
 //
-void Graphics::createFramebuffer()
-{
 	m_swapChainFramebuffers.resize(m_swapChainImageViews.size());
 	for (size_t i = 0; i < m_swapChainImageViews.size(); i++) 
 	{
@@ -820,11 +837,12 @@ void Graphics::createFramebuffer()
 	}
 }
 
-
-
-
 void Graphics::createCommandPool()
 {
+// requires:
+//		m_logicalDevice
+//		m_cmdPool
+//		getQueueFamilyIndexPresent()
 	VkCommandPoolCreateInfo cmdPoolInfo{};
 	{
 		cmdPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -838,19 +856,30 @@ void Graphics::createCommandPool()
 
 void Graphics::createCommandBuffer()
 {
+// requires:
+//		m_cmdPool
+//		m_logicalDevice
+	m_cmdBuffers.resize(MAX_FRAMES_IN_FLIGHT);
+
 	VkCommandBufferAllocateInfo allocInfo{};
 	{
 		allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 		allocInfo.commandPool = m_cmdPool;
 		allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		allocInfo.commandBufferCount = 1;
+		allocInfo.commandBufferCount = static_cast<uint32_t>(m_cmdBuffers.size());
+		
 	}
 
-	VK_ASSERT(vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, &m_cmdBuffer));
+	VK_ASSERT(vkAllocateCommandBuffers(m_logicalDevice, &allocInfo, m_cmdBuffers.data()));
 }
 
 void Graphics::recordCommandBuffer(VkCommandBuffer cmdBuffer, uint32_t imageIndex)
 {
+// requires:
+//		m_renderPass
+//		m_swapChainExtent
+//		m_graphicsPipeline
+//		m_swapChainFramebuffers
 	VkCommandBufferBeginInfo beginInfo{};
 	{
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -888,18 +917,26 @@ void Graphics::recordCommandBuffer(VkCommandBuffer cmdBuffer, uint32_t imageInde
 
 void Graphics::createSyncObjects()
 {
+	m_imageAvailableSemaphore.resize(MAX_FRAMES_IN_FLIGHT);
+	m_renderFinishedSemaphore.resize(MAX_FRAMES_IN_FLIGHT);
+	m_inFlightFence.resize(MAX_FRAMES_IN_FLIGHT);
+
+
 	VkSemaphoreCreateInfo semaphoreInfo{};
 	{
 		semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 	}
-	VkFenceCreateInfo fenceInfo{}; 
+	VkFenceCreateInfo fenceInfo{};
 	{
 		fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 		fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 	}
-	VK_ASSERT(vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_imageAvailableSemaphore));
-	VK_ASSERT(vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_renderFinishedSemaphore));
-	VK_ASSERT(vkCreateFence(m_logicalDevice, &fenceInfo, nullptr, &m_inFlightFence));
+
+	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+		VK_ASSERT(vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_imageAvailableSemaphore[i]));
+		VK_ASSERT(vkCreateSemaphore(m_logicalDevice, &semaphoreInfo, nullptr, &m_renderFinishedSemaphore[i]));
+		VK_ASSERT(vkCreateFence(m_logicalDevice, &fenceInfo, nullptr, &m_inFlightFence[i]));
+	}
 }
 
 void Graphics::mainloop()
@@ -920,23 +957,35 @@ void Graphics::drawFrame() {
 	// submit the recorded command buffer
 	// present the swap chain image
 	
-	vkWaitForFences(m_logicalDevice, 1, &m_inFlightFence, VK_TRUE, UINT64_MAX);
-	vkResetFences(m_logicalDevice, 1, &m_inFlightFence);
+	VK_ASSERT(vkWaitForFences(m_logicalDevice, 1, &m_inFlightFence[m_currentFrame], VK_TRUE, UINT64_MAX));
+	
+	uint32_t imageIndex; // acquire next image
+	{
+		VkResult result = vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, UINT64_MAX, m_imageAvailableSemaphore[m_currentFrame], VK_NULL_HANDLE, &imageIndex);
+		if (m_framebufferResized || result == VK_ERROR_OUT_OF_DATE_KHR) {
+			recreateSwapChain();
+			m_framebufferResized = false;
+			return;
+		}
+		else if (result != VK_SUBOPTIMAL_KHR) {
+			VK_ASSERT(result);
+		}
+	}
 
-	uint32_t imageIndex;
-	vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, UINT64_MAX, m_imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
+	VK_ASSERT(vkResetFences(m_logicalDevice, 1, &m_inFlightFence[m_currentFrame]));
 
-	vkResetCommandBuffer(m_cmdBuffer, 0);
-	recordCommandBuffer(m_cmdBuffer, imageIndex);
+	VK_ASSERT(vkResetCommandBuffer(m_cmdBuffers[m_currentFrame], /*VkCommandBufferResetFlagBits*/0));
+	recordCommandBuffer(m_cmdBuffers[m_currentFrame], imageIndex);
 
-	VkSemaphore waitSemaphores[] = { m_imageAvailableSemaphore };
 	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-	VkSemaphore signalSemaphores[] = { m_renderFinishedSemaphore };
 
+	VkSemaphore waitSemaphores[] = { m_imageAvailableSemaphore[m_currentFrame] };
+	VkSemaphore signalSemaphores[] = { m_renderFinishedSemaphore[m_currentFrame] };
+
+	VkCommandBuffer commandBuffers[] = { m_cmdBuffers[m_currentFrame] };
+	
 	VkSubmitInfo submitInfo{};
 	{
-		VkCommandBuffer commandBuffers[] = { m_cmdBuffer };
-
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		submitInfo.waitSemaphoreCount = 1;
 		submitInfo.pWaitSemaphores = waitSemaphores;
@@ -947,11 +996,9 @@ void Graphics::drawFrame() {
 		submitInfo.pSignalSemaphores = signalSemaphores;
 	}
 	
-	VK_ASSERT(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFence));
+	VK_ASSERT(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_inFlightFence[m_currentFrame]));
 
-
-
-
+	// present swap chain image to screen
 	VkPresentInfoKHR presentInfo{};
 	{
 		VkSwapchainKHR swapChains[] = { m_swapChain };
@@ -965,5 +1012,52 @@ void Graphics::drawFrame() {
 		presentInfo.pResults = nullptr;
 	}
 
-	vkQueuePresentKHR(m_presentQueue, &presentInfo);
+	// queue present
+	{
+		VkResult result = vkQueuePresentKHR(m_presentQueue, &presentInfo);
+		if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
+			recreateSwapChain();
+			return;
+		}
+		else 
+			VK_ASSERT(result);
+	}
+
+	// iterate frame
+	m_currentFrame = (m_currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+void Graphics::recreateSwapChain()
+{
+	int width = 0, height = 0;
+	glfwGetFramebufferSize(m_window, &width, &height);
+	while (width == 0 || height == 0) {
+		glfwGetFramebufferSize(m_window, &width, &height);
+		glfwWaitEvents();
+	}
+
+	vkDeviceWaitIdle(m_logicalDevice);
+
+	cleanupSwapChain();
+
+	createSwapChain();
+	createImageViews();
+	createRenderPass();
+	createGraphicsPipeline();
+	createFramebuffer();
+
+}
+
+void Graphics::cleanupSwapChain()
+{
+	for (size_t i = 0; i < m_swapChainFramebuffers.size(); i++)
+		vkDestroyFramebuffer(m_logicalDevice, m_swapChainFramebuffers[i], nullptr);
+
+	vkDestroyPipeline(m_logicalDevice, m_graphicsPipeline, nullptr);
+	vkDestroyPipelineLayout(m_logicalDevice, m_pipelineLayout, nullptr);
+	vkDestroyRenderPass(m_logicalDevice, m_renderPass, nullptr);
+
+	for (auto& imageView : m_swapChainImageViews)
+		vkDestroyImageView(m_logicalDevice, imageView, nullptr);
+	vkDestroySwapchainKHR(m_logicalDevice, m_swapChain, nullptr);
 }

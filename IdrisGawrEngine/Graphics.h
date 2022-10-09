@@ -7,8 +7,8 @@
 
 
 
-
 class Graphics {
+	friend struct callback;
 public:
 	const std::vector<const char*> instanceExtensions = {
 	#if defined(_DEBUG)
@@ -40,8 +40,6 @@ private:
 	void queryInstanceExtensions();
 	/* create vulkan instance*/
 	void createInstance();
-
-
 	/*selects device from available gpus*/
 	void getPhysicalDevice();
 	/*checks physical device supports validation layers requested (set with 'validationLayers')*/
@@ -50,8 +48,6 @@ private:
 	void queryPhysicalDeviceExtensions();
 	/*creates a logical device for vulkan functionality*/
 	void createLogicalDevice();
-
-	
 	/*creates glfw window*/
 	void createWindow(int width, int height);
 	/*gets surface from glfw window*/
@@ -59,19 +55,15 @@ private:
 	/*creates swap chain*/
 	void createSwapChain();
 	/*retrieves swap chain images and image views*/
-	void createSwapChainImages();
-	
-
+	void createImageViews();
 
 	void createRenderPass();
 
 	void createFramebuffer();
 
 	VkShaderModule loadShader(std::string& filepath);
-	void createPipeline(std::string& vertShader, std::string& fragShader);
 
-	
-
+	void createGraphicsPipeline();
 	/*creates command pool*/
 	void createCommandPool();
 	/*creates command buffer in pool*/
@@ -82,18 +74,24 @@ private:
 	void createSyncObjects();
 
 	void mainloop();
+
 	void drawFrame();
+
+	void recreateSwapChain();
+
+	void cleanupSwapChain();
 
 	/*gets the index of the queue family which matches flag*/
 	uint32_t getQueueFamilyIndex(VkQueueFlagBits flag);
+	/*gets the index of queue family which supports presentation(ie rendering to the screen)*/
 	uint32_t getQueueFamilyIndexPresent();
 
 	VkInstance					m_instance;
 	VkDevice					m_logicalDevice;
 	VkPhysicalDevice			m_physicalDevice;
 
-	VkQueue						m_graphicsQueue;
-	VkQueue						m_presentQueue;
+	GLFWwindow* m_window;
+	const char* m_title;
 
 	VkSurfaceKHR				m_surface;
 	VkSwapchainKHR				m_swapChain;
@@ -103,32 +101,34 @@ private:
 	std::vector<VkImage>		m_swapChainImages;
 	std::vector<VkImageView>	m_swapChainImageViews;
 
+	VkQueue						m_graphicsQueue;
+	VkQueue						m_presentQueue;
 
-	std::vector<VkFramebuffer>	m_swapChainFramebuffers;
+	bool						m_framebufferResized = false;
+	std::vector<VkFramebuffer>	m_swapChainFramebuffers; // one framebuffer per image
+
 	VkRenderPass				m_renderPass;
-	
 	VkPipelineLayout			m_pipelineLayout;
 	VkPipeline					m_graphicsPipeline;
 	VkCommandPool				m_cmdPool;
-	VkCommandBuffer				m_cmdBuffer;
+	
+	uint32_t					m_currentFrame = 0;
 
-	VkSemaphore					m_imageAvailableSemaphore;
-	VkSemaphore					m_renderFinishedSemaphore;
-	VkFence						m_inFlightFence;
+	// per frame variables frame
+	std::vector<VkCommandBuffer>m_cmdBuffers;
+	std::vector<VkSemaphore>    m_imageAvailableSemaphore;
+	std::vector<VkSemaphore>    m_renderFinishedSemaphore;
+	std::vector<VkFence>		m_inFlightFence;
 
-	GLFWwindow*					m_window;
-	const char*					m_title;
 };
 
 namespace Gawr {
 	namespace Core {
 		class Window {
-
-
 		private:
 			VkSurfaceKHR	m_surface;
 			VkSwapchainKHR	m_swapChain;
-			GLFWwindow*		m_window;
+			GLFWwindow*		m_glfwWindow;
 
 			VkCommandPool				m_cmdPool;
 			std::vector<VkImage>		m_swapChainImages;
@@ -149,6 +149,38 @@ namespace Gawr {
 			VkInstance		 m_instance;
 			VkPhysicalDevice m_physicalDevice;
 			VkDevice		 m_logicalDevice;
+		};
+
+		class Swapchain {
+			VkSwapchainKHR				m_swapChain;
+			VkExtent2D					m_swapChainExtent;
+			VkFormat					m_swapChainFormat;
+			VkPresentModeKHR			m_swapChainPresentMode;
+			std::vector<VkImage>		m_swapChainImages;
+			std::vector<VkImageView>	m_swapChainImageViews;
+		};
+
+		class RenderFrame { 
+			VkCommandBuffer	m_cmdBuffers;
+			VkSemaphore		m_imageAvailableSemaphore;
+			VkSemaphore		m_renderFinishedSemaphore;
+			VkFence			m_inFlightFence;
+		};
+
+		template<typename RenderFrame_t> 
+			requires std::is_base_of_v<RenderFrame, RenderFrame_t>
+		class Renderpass {
+			static const uint32_t		MaxFramesInFlight = 2;
+			uint32_t					m_currentFrame = 0;
+			VkRenderPass				m_renderPass;
+			VkCommandPool				m_cmdPool;
+			std::vector<VkFramebuffer>	m_swapChainFramebuffers;
+			RenderFrame_t				m_frames[MaxFramesInFlight]; // current frames in flight
+		};
+
+		class ShaderProgram {
+			VkPipelineLayout			m_pipelineLayout;
+			VkPipeline					m_graphicsPipeline;
 		};
 	}
 }
