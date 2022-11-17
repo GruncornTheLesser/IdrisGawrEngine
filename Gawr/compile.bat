@@ -1,4 +1,6 @@
-echo compiling shaders
+echo Compiling Shaders...
+
+
 
 for %%a in (Resources\*.frag) do (
 	echo %%a
