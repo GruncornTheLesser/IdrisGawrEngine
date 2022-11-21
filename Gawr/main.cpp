@@ -1,25 +1,25 @@
 #include "Gawr/Application.h"
 #include "Graphics.h"
-#include "ecs.h"
+#include "Gawr/ECS/ecs.h"
 #include <algorithm>
 #include <iostream>
 #include <map>
 #include <typeindex>
 
-typedef int A;
-typedef float B;
+using A = int;
+using B = float;
 
 using namespace Gawr::ECS;
 
 int main() 
 {
-	/*
+	
 	{
-		
 		A a = 1;
 		B b = 2;
 
-		basic_registry<A, B> reg;
+		using entity_t = uint32_t;
+		basic_registry<entity_t, A, B> reg;
 
 		entity_t e0 = reg.create();
 		entity_t e1 = reg.create();
@@ -44,8 +44,8 @@ int main()
 		for (auto [e, a, b] : reg.view<A, B>())
 			std::cout << e << ", " << a << ", " << b << std::endl;
 	}
-	*/
-	Application graphics;
-	//Gawr::Application app;
+	
+	//Application graphics;
+	Gawr::Application app;
 }
 

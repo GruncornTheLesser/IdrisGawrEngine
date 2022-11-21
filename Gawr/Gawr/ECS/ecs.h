@@ -3,14 +3,22 @@
 #include <stdint.h>
 #include <limits>
 #include <queue>
+#include <concepts>
 
 using std::uint32_t;
 
 namespace Gawr {
 	namespace ECS {
-		typedef uint32_t entity_t;
+		template<typename t>
+		concept validHandle = std::is_integral_v<t>;
+
+		template<typename t, typename ... ts>
+		concept contains = (std::is_same_v<t, ts> || ...);
+
+		template<typename entity_t> requires validHandle<entity_t>
 		const entity_t tombstone = std::numeric_limits<entity_t>::max();
 		
+		template<typename entity_t>
 		class handle_manager {
 		public:
 			entity_t create() {
@@ -35,13 +43,13 @@ namespace Gawr {
 
 		private:
 			std::priority_queue<entity_t> m_queue;
-			uint32_t m_next_e = 0;
+			entity_t m_next_e = 0;
 		};
 
-		template<typename comp_t>
+		template<typename entity_t, typename comp_t> requires validHandle<entity_t>
 		class basic_storage {
 		public:
-			basic_storage(size_t size = 256) : m_sparse(size, tombstone), m_packed() {
+			basic_storage(size_t size = 256) : m_sparse(size, tombstone<entity_t>), m_packed() {
 				m_packed.reserve(size);
 			}
 
@@ -52,11 +60,11 @@ namespace Gawr {
 			void reserve(size_t size) {
 				if (m_packed.size() >= size) return;
 
-				m_sparse.resize(size, tombstone);
+				m_sparse.resize(size, tombstone<entity_t>);
 				m_packed.reserve(size);
 			}
 
-			template<typename ... args_ts>
+			template<typename ... args_ts> requires std::is_constructible_v<comp_t, args_ts...>
 			comp_t& emplace(entity_t e, args_ts&& ... args) {
 				m_sparse[e] = static_cast<uint32_t>(m_packed.size());
 				m_packed.push_back(e);
@@ -73,7 +81,7 @@ namespace Gawr {
 				m_comps[m_sparse[e]] = m_comps.back();
 				m_comps.pop_back();
 
-				m_sparse[e] = tombstone;
+				m_sparse[e] = tombstone<entity_t>;
 			}
 
 			void swap(size_t i1, size_t i2) {
@@ -83,13 +91,13 @@ namespace Gawr {
 			}
 
 			void clear() {
-				std::for_each(m_packed.begin(), m_packed.end(), [&](entity_t& e) { m_sparse[e] = tombstone; });
-				std::fill(m_sparse.begin(), m_sparse.end(), tombstone);
+				std::for_each(m_packed.begin(), m_packed.end(), [&](entity_t& e) { m_sparse[e] = tombstone<entity_t>; });
+				std::fill(m_sparse.begin(), m_sparse.end(), tombstone<entity_t>);
 				m_packed.clear();
 				m_comps.clear();
 			}
 
-			template<typename predicate_t = std::less<>>
+			template<typename predicate_t = std::less<>> requires std::predicate<predicate_t, comp_t&, comp_t&>
 			void sort(predicate_t predicate = std::less<>{}) {
 				std::sort(m_packed.begin(), m_packed.end(), [&](entity_t e1, entity_t e2) {
 					return predicate(m_comps[index_of(e1)], m_comps[index_of(e2)]);
@@ -104,8 +112,8 @@ namespace Gawr {
 				m_comps = comps;
 			}
 
-			template<typename t>
-			void reflect(basic_storage<t>& other) {
+			template<typename other_comp_t>
+			void reflect(basic_storage<entity_t, other_comp_t>& other) {
 				std::sort(m_packed.begin(), m_packed.end(), [&](entity_t e1, entity_t e2) {
 					return other.index_of(e1) < other.index_of(e2);
 					});
@@ -120,7 +128,7 @@ namespace Gawr {
 			}
 
 			bool has(entity_t e) const {
-				return e < m_sparse.size() && m_sparse[e] != tombstone;
+				return e < m_sparse.size() && m_sparse[e] != tombstone<entity_t>;
 			}
 
 			size_t index_of(entity_t e) const {
@@ -135,9 +143,13 @@ namespace Gawr {
 				return m_packed.size();
 			}
 
-			auto begin() const { return m_packed.begin(); };
+			auto begin() const { 
+				return m_packed.begin(); 
+			};
 
-			auto end() const { return m_packed.end(); };
+			auto end() const { 
+				return m_packed.end(); 
+			};
 
 		private:
 			std::vector<size_t>		m_sparse;	// sparsely paged array of index to entities
@@ -145,11 +157,13 @@ namespace Gawr {
 			std::vector<comp_t>		m_comps;	// packed array of components
 		};
 
-		template<typename ... comp_ts>
-		class basic_registry : public handle_manager, private basic_storage<comp_ts>... {
+		template<typename entity_t = uint32_t, typename ... comp_ts> requires validHandle<entity_t>
+		class basic_registry : public handle_manager<entity_t>, private basic_storage<entity_t, comp_ts>... 
+		{
 		public:
 			template<typename view_comp1_t, typename ... view_comp_ts>
 			class basic_view {
+				using reg = basic_registry<entity_t, comp_ts...>;
 			public:
 				struct Iterator {
 					using value_type = std::tuple<entity_t, view_comp1_t, view_comp_ts...>;
@@ -159,26 +173,19 @@ namespace Gawr {
 					using iterator_category = std::random_access_iterator_tag;
 
 					Iterator() = default;
-					Iterator(basic_registry<comp_ts...>* reg, size_t i) : m_reg(reg), m_index(i) { }
+					Iterator(reg& reg, size_t i) : m_reg(reg), m_index(i) { }
 					
 					reference operator*() {
-						entity_t e = m_reg->storage<view_comp1_t>()[m_index];
+						entity_t e = m_reg.storage<view_comp1_t>()[m_index];
 						return std::tuple<entity_t, view_comp1_t&, view_comp_ts&...>(e,
-							m_reg->storage<view_comp1_t>().get_component(m_index),
-							m_reg->get<view_comp_ts>(e) ...);
-					}
-					
-					pointer operator->() {
-						entity_t e = m_reg->storage<view_comp1_t>()[m_index];
-						return std::tuple<entity_t, view_comp1_t*, view_comp_ts*...>(e,
-							&m_reg->storage<view_comp1_t>().get_component(m_index),
-							&m_reg->get<view_comp_ts>(e) ...);
+							m_reg.storage<view_comp1_t>().get_component(m_index),
+							m_reg.get<view_comp_ts>(e) ...);
 					}
 
 					// Prefix increment
 					Iterator& operator++() {
 						do { m_index++; } 
-						while (m_index < m_reg->storage<view_comp1_t>().size() && !m_reg->has<view_comp1_t, view_comp_ts...>(m_reg->storage<view_comp1_t>()[m_index]));
+						while (m_index < m_reg.storage<view_comp1_t>().size() && !m_reg.has<view_comp1_t, view_comp_ts...>(m_reg.storage<view_comp1_t>()[m_index]));
 						
 						return *this; 
 					}
@@ -191,7 +198,7 @@ namespace Gawr {
 					// Prefix decrement
 					Iterator& operator--() { 
 						do { m_index--; } 
-						while (m_index > 0 && m_reg->has<view_comp1_t, view_comp_ts...>(m_reg->storage<view_comp1_t>()[m_index]));
+						while (m_index > 0 && m_reg.has<view_comp1_t, view_comp_ts...>(m_reg.storage<view_comp1_t>()[m_index]));
 						
 						return *this; 
 					}
@@ -209,50 +216,50 @@ namespace Gawr {
 					};
 
 				private:
-					basic_registry<comp_ts...>*	m_reg;
-					size_t						m_index;
+					reg&	m_reg;
+					size_t	m_index;
 				};
 				
-				basic_view(basic_registry* reg) : m_reg(reg) { }
+				basic_view(reg& reg) : m_reg(reg) { }
 
 				Iterator begin() { return ++Iterator(m_reg, -1); };
-				Iterator end() { return Iterator(m_reg, m_reg->storage<view_comp1_t>().size()); };
+				Iterator end() { return Iterator(m_reg, m_reg.storage<view_comp1_t>().size()); };
 
-				Iterator rbegin() { return --Iterator(m_reg, m_reg->storage<view_comp1_t>().size()); };
+				Iterator rbegin() { return --Iterator(m_reg, m_reg.storage<view_comp1_t>().size()); };
 				Iterator rend() { return Iterator(m_reg, -1); };
 			
 			private:
-				basic_registry* m_reg;
+				reg& m_reg;
 			};
 
-			template<typename ... ts>
+			template<typename ... ts> requires (contains<ts, comp_ts...> && ...)
 			basic_view<ts...> view() {
-				return basic_view<ts...>{ this };
+				return basic_view<ts...>(*this);
 			}
 
 			template<typename t>
-			basic_storage<t>& storage() {
-				return static_cast<basic_storage<t>&>(*this);
+			basic_storage<entity_t, t>& storage() {
+				return static_cast<basic_storage<entity_t, t>&>(*this);
 			}
 
 			template<typename ... ts>
 			bool has(entity_t e) const {
-				return (basic_storage<ts>::has(e) && ...);
+				return (basic_storage<entity_t, ts>::has(e) && ...);
 			}
 
 			template<typename t> 
 			t& get(entity_t e) {
-				return basic_storage<t>::get_component(basic_storage<t>::index_of(e));
+				return basic_storage<entity_t, t>::get_component(basic_storage<entity_t, t>::index_of(e));
 			}
 
 			template<typename t>
 			t* try_get(entity_t e) {
-				return basic_storage<t>::has(e) ? &basic_storage<t>::get_component(e) : nullptr;
+				return basic_storage<entity_t, t>::has(e) ? &basic_storage<entity_t, t>::get_component(e) : nullptr;
 			}
 		
 			template<typename t, typename ... args_ts>
 			t& emplace(entity_t e, args_ts&& ... args) {
-				return basic_storage<t>::emplace(e, args...);
+				return basic_storage<entity_t, t>::emplace(e, args...);
 			}
 		};
 	}
