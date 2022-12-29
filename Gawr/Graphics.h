@@ -8,68 +8,77 @@
 #include <array>
 
 class Application {
+	// window
 	struct Callback
 	{
 		static void glfwError(int, const char* message);
-		static void glfwWindowResize(GLFWwindow* wnd, int width, int height);
 	};
-
 	friend struct Application::Callback;
 public:
+	//context
 	const std::vector<const char*> instanceExtensions = {
 	#if defined(_DEBUG)
 		VK_EXT_DEBUG_UTILS_EXTENSION_NAME
 	#endif
 	};
-
 	const std::vector<const char*> deviceExtensions = {
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME
 	};
-
 	const std::vector<const char*> validationLayers = {
 	#if defined(_DEBUG)
 		"VK_LAYER_KHRONOS_validation"
 	#endif
 	};
 
+	// application
 	Application(const char* name = "GawrEngine");
 
 	~Application();
 
 private:
+	// context
 	/* create vulkan instance*/
 	void createVkInstance();
 	/*selects device from available gpus*/
 	void getPhysicalDevice();
 	/*creates a logical device for vulkan functionality*/
 	void createLogicalDevice();
-	/*creates glfw window*/
-	void createWindow(int width, int height, const char* title);
-	/*gets surface from glfw window*/
-	void createSurface();
-	/*creates swap chain*/
+	
+	// window
+	/*creates glfw window and surface */
+	void createWindow(int width, int height, const char* title, bool fullscreen = false);
+	/*creates renderpass *REQUIRES SURFACE FORMAT* */
+	void createRenderPass();
+	/*creates swap chain, *REQUIRES RENDERPASS* */
 	void createSwapChain();
+	/*creates swapchain Images *REQUIRES SWAPCHAIN* */
+	void createImages();
 
-	void createFramebuffer();
 
+	// shader
 	/*creates command pool*/
 	void createCommandPool();
-	/*creates command buffer in pool*/
+	/*creates command buffer in pool *REQUIRES CMDPOOL* */
 	void createFrames();
-
-
-
-	VkShaderModule loadShader(std::string& filepath);
 
 	void createGraphicsPipeline();
 	
+	VkShaderModule loadShader(std::string& filepath);
+
 	void recordCommandBuffer(VkCommandBuffer cmdBuffer, uint32_t imageIndex);
+
+
+
+
+	void prepareFrame(uint32_t currentFrame);
+
+	void submitFrame(uint32_t currentFrame);
 
 	void mainloop();
 
-	void recreateSwapChain();
 
-	void cleanupSwapChain();
+
+	void recreateSwapChain();
 
 	/*gets the index of the queue family which matches flag*/
 	uint32_t getQueueFamilyIndex(VkQueueFlagBits flag);
@@ -77,50 +86,44 @@ private:
 	uint32_t getQueueFamilyIndexPresent();
 
 	VkInstance					m_instance;
-	VkDevice					m_logicalDevice;
 	VkPhysicalDevice			m_physicalDevice;
+	VkDevice					m_logicalDevice;
 
 	GLFWwindow*					m_window;
-
 	VkSurfaceKHR				m_surface;
-	VkSwapchainKHR				m_swapChain;
-	VkFormat					m_surfaceFormat;
 
-	VkExtent2D					m_swapChainExtent;
-	VkPresentModeKHR			m_swapChainPresentMode;
-	
-	/*
-	struct SwapchainImage {
-		VkImage m_image;
-		VkImageView m_view;
-		VkFramebuffer m_framebuffer;
-	};
-	*/
-	std::vector<VkImage>		m_swapChainImages;
-	std::vector<VkImageView>	m_swapChainImageViews;
-	std::vector<VkFramebuffer>	m_swapChainFramebuffers;
-	bool						m_resized = false;
 	VkRenderPass				m_renderPass;
 
-	VkQueue						m_graphicsQueue;
-	VkCommandPool				m_cmdPool;
-	
+	VkSwapchainKHR				m_swapChain;
+	VkExtent2D					m_swapChainExtent;
+	VkPresentModeKHR			m_swapChainPresentMode;
+	VkFormat					m_surfaceFormat;
+
+	struct SwapchainImage {
+		VkImage					m_image;
+		VkImageView				m_view;
+		VkFramebuffer			m_framebuffer;
+	};
+	std::vector<SwapchainImage> m_swapChainImages;
+
 	VkQueue						m_presentQueue;
-	//VkCommandPool				m_cmdPool;
+	VkQueue						m_graphicsQueue;
+
+	VkCommandPool				m_cmdPool;			// 1 per thread
+
+	// Aim for 15-30 command buffers and 5-10 vkQueueSubmit() calls per frame
+	struct Renderer {
+		VkCommandBuffer m_cmdBuffer;
+		VkSemaphore		m_imageAvailable;
+		VkSemaphore		m_renderFinished;
+		VkFence			m_inFlight;
+	};
+	std::array<Renderer, 2>		m_frames;
 
 	// shader program
 	VkPipelineLayout			m_pipelineLayout;
 	VkPipeline					m_graphicsPipeline;
 	
-	// rendering
-	struct Renderer {
-		VkCommandBuffer m_cmdBuffer;
-		VkSemaphore m_imageAvailable;
-		VkSemaphore m_renderFinished;
-		VkFence m_inFlight;
-	};
-
-	uint32_t m_currentFrame = 0;
-	std::array<Renderer, 2> m_frames;
+	bool						m_resized = false;	
 };
 

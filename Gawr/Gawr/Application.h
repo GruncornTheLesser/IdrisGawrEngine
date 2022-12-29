@@ -1,30 +1,23 @@
 #pragma once
 #include "Core/Window.h"
 
-
 namespace Gawr {
-	class RendererBase {
-	public:
-		void refresh() const;
-
-	private:
-	};
-
-	class Application : Gawr::Core::Window
+	
+	class Application
 	{
 	public:
-		//Scene<RendererTest> scene;
-
 		void run() {
-			while (!closed())
+			while (!m_window.closed())
 			{
 				//scene.draw();
 			}
 		}
 
-		Application() : Gawr::Core::Window(800, 600, "Gawr") { 
+		Application() : m_window("app", 800, 600, false) {
 			run();
 		}
+	private:
+		Gawr::Core::Window m_window;
 	};
 }
 

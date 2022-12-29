@@ -1,99 +1,114 @@
 #pragma once
+#include "Registry.h"
+#include "Gawr/ECS/Filters.h" // not necessary but you probably want
+
+#include <iostream>
 namespace Gawr::ECS {
-	template<typename reg_t, typename t, typename ... ts>
-	class View final : private reg_t {
+	template<typename ... comp_ts> template<typename ... filter_ts>
+	class Registry<comp_ts...>::View {
 	public:
-		View() = delete;
+		using get_policy = std::tuple_element_t<0, std::tuple<filter_ts...>>;
+		struct Iterator;
+		struct ReverseIterator;
 
-		auto begin() {
-			return ++ReverseIterator(*this, reg_t::template pool<t>().size());
+		View(Registry& reg) : m_reg(reg) { }
+
+		ReverseIterator begin() {
+			return ++ReverseIterator(m_reg, m_reg.pool<get_policy::orderby>().size());
 		}
 
-		auto end() {
-			return ReverseIterator(*this, -1);
+		ReverseIterator end() {
+			return ReverseIterator(m_reg, -1);
 		}
 
-		auto rbegin() {
-			return ++Iterator(*this, -1);
+		Iterator rbegin() {
+			return ++Iterator(m_reg, -1);
 		}
 
-		auto rend() {
-			return Iterator(*this, reg_t::template pool<t>().size());
+		Iterator rend() {
+			return Iterator(m_reg, m_reg.pool<get_policy::orderby>().size());
 		}
 
-		struct Iterator {
-			using value_type = std::tuple<uint32_t, t, ts...>;
-			using difference_type = uint32_t;
-			using reference = std::tuple<uint32_t, t&, ts&...>;
-			using pointer = std::tuple<uint32_t, t*, ts*...>;
-			using iterator_category = std::random_access_iterator_tag;
+	private:
+		Registry& m_reg;
+	};
 
-			Iterator() = default;
-			Iterator(reg_t& Reg, size_t i) : m_reg(Reg), m_index(i) { }
 
-			reference operator*() {
-				uint32_t e = m_reg.template pool<t>().handle(m_index);
-				return std::tuple<uint32_t, t&, ts&...>(e,
-					m_reg.template pool<t>().get_i(m_index),
-					m_reg.template get_i<ts>(e) ...);
-			}
+	template<typename ... comp_ts> template<typename ... filter_ts>
+	struct Registry<comp_ts...>::View<filter_ts...>::Iterator {
+	public:
+		using difference_type = size_t;
+		using iterator_category = std::random_access_iterator_tag;
 
-			// Prefix increment/decrement
-			Iterator& operator++() {
-				while (++m_index < m_reg.template pool<t>().size() &&
-					!m_reg.template has<ts...>(m_reg.template pool<t>().handle(m_index)));
-				return *this;
-			}
-			Iterator& operator--() {
-				while (--m_index > -1 &&
-					!m_reg.template has<ts...>(m_reg.template pool<t>().handle(m_index)));
-				return *this;
-			}
+		Iterator() = default;
+		Iterator(Registry& reg, size_t i) : m_reg(reg), m_index(i) { }
 
-			// Postfix increment/decrement
-			Iterator operator++(int) {
-				Iterator temp = *this;
-				++(*this);
-				return temp;
-			}
-			Iterator operator--(int) {
-				Iterator temp = *this;
-				--(*this);
-				return temp;
-			}
+		auto operator*()
+		{
+			entity_t e = m_reg.pool<get_policy::orderby>().entity_at(m_index);
+			return get_policy::template get(m_reg, e);
+		}
 
-			friend bool operator==(const Iterator& lhs, const Iterator& rhs) {
-				return lhs.m_index == rhs.m_index;
-			};
-			friend bool operator!=(const Iterator& lhs, const Iterator& rhs) {
-				return lhs.m_index != rhs.m_index;
-			};
+		Iterator& operator++() 
+		{
+			while (++m_index != m_reg.pool<get_policy::orderby>().size() && !valid());
+			return *this;
+		}
 
-		private:
-			reg_t& m_reg;
-			size_t m_index;
+		Iterator& operator--() {
+			while (--m_index != -1 && !valid());
+			return *this;
+		}
+
+		// Postfix increment/decrement
+		Iterator operator++(int) {
+			Iterator temp = *this;
+			++(*this);
+			return temp;
+		}
+		Iterator operator--(int) {
+			Iterator temp = *this;
+			--(*this);
+			return temp;
+		}
+
+		friend bool operator==(const Iterator& lhs, const Iterator& rhs) {
+			return lhs.m_index == rhs.m_index;
+		};
+		friend bool operator!=(const Iterator& lhs, const Iterator& rhs) {
+			return lhs.m_index != rhs.m_index;
 		};
 
-		struct ReverseIterator : public Iterator {
-			ReverseIterator(reg_t& Reg, size_t index)
-				: Iterator(Reg, index)
-			{ }
-			ReverseIterator& operator++() {
-				Iterator::operator--();
-				return *this;
-			}
-			ReverseIterator& operator--() {
-				Iterator::operator++();
-				return *this;
-			}
-			ReverseIterator operator++(int) {
-				Iterator temp = *this;
-				++(*this); return temp;
-			}
-			ReverseIterator operator--(int) {
-				Iterator temp = *this;
-				--(*this); return temp;
-			}
-		};
+	private:
+		bool valid() {
+			entity_t e = m_reg.pool<get_policy::orderby>().entity_at(m_index);
+			return (filter_ts::template isValid(m_reg, e) && ...);
+		}
+
+		Registry&	m_reg;
+		size_t		m_index;
+		// store temporary pointers to values
+	};
+
+	template<typename ... comp_ts> template<typename ... filter_ts>
+	struct Registry<comp_ts...>::View<filter_ts...>::ReverseIterator : Iterator 
+	{
+		ReverseIterator(Registry& Reg, size_t i) : Iterator(Reg, i) { }
+		ReverseIterator& operator++() {
+			Iterator::operator--();
+			return *this;
+		}
+		ReverseIterator& operator--() {
+			Iterator::operator++();
+			return *this;
+		}
+		ReverseIterator operator++(int) {
+			Iterator temp = *this;
+			++(*this); return temp;
+		}
+		ReverseIterator operator--(int) {
+			Iterator temp = *this;
+			--(*this); return temp;
+		}
 	};
 }

@@ -75,13 +75,12 @@ VkInstance Gawr::Core::Context::createInstance(const char* appName)
 		}
 	}
 
-	// get required extensions
+	// get vulkan extensions required for glfw
 	uint32_t glfwExtensionCount;
 	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 	std::vector<const char*> uniqueExtensions(glfwExtensionCount + instanceExts.size());
 	std::set_union(glfwExtensions, glfwExtensions + glfwExtensionCount, instanceExts.begin(), instanceExts.end(), uniqueExtensions.begin());
 
-	// get vulkan extensions required for glfw
 	VkApplicationInfo appInfo{};
 	{
 		appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;

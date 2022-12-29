@@ -1,97 +1,131 @@
 #include "Gawr/Application.h"
-#include "Graphics.h"
 #include "Gawr/ECS/Registry.h"
-#include "Gawr/ECS/EventDispatcher.h"
-#include <algorithm>
+#include "Gawr/ECS/View.h"
+
+
+
 #include <iostream>
-#include <map>
-#include <typeindex>
-#include <iostream>
+#include <bitset>
+#include <string>
 
-using A = int;
-using B = float;
-struct C {
-	C() { std::cout << "I WAS INITIALIZED" << std::endl; }
-	C(const C& other) { std::cout << "I WAS COPIED >:(" << std::endl; }
-};
 
-template <bool B, typename T>
-struct member;
+using namespace Gawr::ECS;
 
-template <typename T>
-struct member<true, T> : std::vector<T> { };
+struct A { int a; };
+struct B { int b; };
+struct C { };
 
-template <typename T>
-struct member<false, T> { };
+template<typename ... ts>
+struct D { };
 
-template<bool con>
-struct D {
-	void conTrue() requires con { }
-	void conFalse() requires !con { }
-	
-	member<con, int> data;
+template<typename ... ts>
+struct E { };
+
+class test : Registry<A, B, C> {
+public:
+	test() { 
+		for (int i = 0; i < 10; i++)
+			create();
+
+		for (int i = 1; i < 9; i++)
+			pool<A>().emplace(i, (i + 3) % 10);
+
+		for (int i = 0; i < 4; i++) 
+			pool<B>().emplace(i, (i + 6) % 10);
+
+		for (int i = 6; i < 10; i++)
+			pool<C>().emplace(i);
+	}
+
+	void print() {
+		std::cout << "e |A |B |C " << std::endl;
+		for (int e = 0; e < 10; e++)
+			std::cout << e <<
+			" |" << (pool<A>().has(e) ? std::to_string(pool<A>().get(e).a) : " ") <<
+			" |" << (pool<B>().has(e) ? std::to_string(pool<B>().get(e).b) : " ") <<
+			" |" << (pool<C>().has(e) ? "#" : " ") <<
+			std::endl;
+	}
+
+	void iterator() {
+		
+		std::cout << "A\n";
+		for (auto [e, b] : view<include<B>>())
+		{
+			std::cout << e << std::endl;
+		}
+
+		std::cout << "A & C & !B\n";
+		for (auto [e, a] : view<include<A, C>, exclude<B>>())
+		{
+			std::cout << e << std::endl;
+		}
+		
+		std::cout << "A & B\n";
+		for (auto [e, a, b] : view<include<A, B>>())
+		{
+			std::cout << e << std::endl;
+		}
+
+		std::cout << "A & !B & !C\n";
+		for (auto [e, a] : view<include<A>, exclude<B, C>>())
+		{
+			std::cout << e << std::endl;
+		}
+
+		struct custom_filter {
+			static bool isValid(Registry& reg, entity_t e) { 
+				return reg.pool<A>().get(e).a > 4; 
+			}
+		};
+
+		std::cout << "A A.a > 4\n";
+		for (auto [e, a] : view<include<A>, custom_filter>()) {
+			std::cout << e << std::endl;
+		}
+	}
+
+	void sort() {
+		print();
+		
+		std::cout << "-----" << std::endl;
+		pool<A>().sort([&](A lhs, A rhs) { return lhs.a < rhs.a; });
+		
+		std::cout << "e :";
+		for (auto e : pool<A>()) std::cout << e << ":" << pool<A>().get(e).a << ", ";
+		std::cout << std::endl;
+		/*
+		std::cout << "-----" << std::endl;
+		pool<A>().sort([&](entity_t lhs, entity_t rhs) { return lhs < rhs; });
+		
+		std::cout << "e :";
+		for (auto e : pool<A>()) std::cout << e << ":" << pool<A>().get(e).a << ", ";
+		std::cout << std::endl;
+		
+		std::cout << "-----" << std::endl;
+
+		pool<B>().sort([&](B lhs, B rhs) { return lhs.b < rhs.b; });
+
+		std::cout << "e :";
+		for (auto e : pool<B>()) std::cout << e << ":" << pool<B>().get(e).b << ", ";
+		std::cout << std::endl;
+
+		pool<B>().reflect(pool<A>());
+
+		std::cout << "-----" << std::endl;
+
+		std::cout << "e :";
+		for (auto e : pool<B>()) std::cout << e << ":" << pool<B>().get(e).b << ", ";
+		std::cout << std::endl;
+		*/
+	}
+
 };
 
 int main() 
 {
-	D<true> d;
-	d.data.emplace_back(0);
-
-	//Gawr::ECS::Pool<uint32_t, C> puh;
-	//puh.emplace(1);
-	//puh.emplace(2);
-	//puh.erase(1);
-
-	//test.create<A>();
-	//test.get<A>();
-
-	{
-		using namespace Gawr::ECS;
-		Registry<uint32_t, A, B, C> reg;
-
-		uint32_t e0 = reg.create();
-		uint32_t e1 = reg.create();
-		uint32_t e2 = reg.create();
-		uint32_t e3 = reg.create();
-		uint32_t e4 = reg.create();
-		
-		reg.emplace<C>(e0);
-		reg.emplace<C>(e1);
-		reg.emplace<C>(e2);
-		reg.emplace<C>(e3);
-		reg.emplace<C>(e4);
-		
-		reg.emplace<A>(e0, 2);	// 0, 2		// 3, 0
-		reg.emplace<A>(e1, 3);	// 1, 3		// 2, 1
-		reg.emplace<A>(e2, 1);	// 2, 1		// 0, 2
-		reg.emplace<A>(e3, 0);	// 3, 0		// 1, 3
-		reg.emplace<A>(e4, 4);	// 4, 4		// 4, 4
-
-		reg.pool<A>().sort();
-		//reg.pool<C>().sort([](handle_t e1, handle_t e2) { return e1 > e2; };);
-
-		reg.emplace<B>(e0, 2.0f);	// 0, 2		// 3, 0
-		reg.emplace<B>(e1, 3.0f);	// 1, 3		// 2, 1
-		reg.emplace<B>(e2, 1.0f);	// 2, 1		// 0, 2
-		reg.emplace<B>(e3, 0.0f);	// 3, 0		// 1, 3
-		reg.emplace<B>(e4, 4.0f);	// 4, 4		// 4, 4
-
-		reg.pool<B>().reflect(reg.pool<A>());
-
-		auto start = reg.view<A, B>().begin();
-		auto end = reg.view<A, B>().end();
-		
-		auto rstart = reg.view<A, B>().rbegin();
-		auto rend = reg.view<A, B>().rend();
-
-		auto& view = reg.view<A, B>();
-
-		for (auto [e, a, b] : reg.view<A, B>()) {
-			//std::cout << reg.pool<A>().index(e) << std::endl;
-			if (e == 2) reg.erase<A>(e);
-		}
-	}
+	test t{};
+	t.iterator();
+	//t.sort();
 	
-	Application test_implementation;
-	//Gawr::Application app;
 }
