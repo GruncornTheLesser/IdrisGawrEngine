@@ -1,6 +1,6 @@
 #pragma once
 #include "Registry.h"
-#include "Gawr/ECS/Filters.h" // not necessary but you probably want
+#include "Filters.h" // not necessary but you probably want
 
 #include <iostream>
 namespace Gawr::ECS {
@@ -87,7 +87,6 @@ namespace Gawr::ECS {
 
 		Registry&	m_reg;
 		size_t		m_index;
-		// store temporary pointers to values
 	};
 
 	template<typename ... comp_ts> template<typename ... filter_ts>

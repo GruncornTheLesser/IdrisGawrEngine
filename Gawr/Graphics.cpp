@@ -58,6 +58,8 @@ Application::Application(const char* name)
 
 	createLogicalDevice();
 
+
+
 	// window
 	createWindow(800, 600, name);
 
@@ -67,17 +69,17 @@ Application::Application(const char* name)
 
 	createImages();
 
+
+	
 	createCommandPool();
 
-	createFrames();
+	createFrames(); // creates cmd buffer semaphores and fences for each frame. 
 
 	// get queues for render pass
 	vkGetDeviceQueue(m_logicalDevice, getQueueFamilyIndex(VK_QUEUE_GRAPHICS_BIT), 0, &m_graphicsQueue);
 	vkGetDeviceQueue(m_logicalDevice, getQueueFamilyIndexPresent(), 0, &m_presentQueue);
 
 	createGraphicsPipeline();
-
-	mainloop();
 }
 
 Application::~Application()
@@ -823,7 +825,7 @@ void Application::recordCommandBuffer(VkCommandBuffer cmdBuffer, uint32_t imageI
 	VK_ASSERT(vkEndCommandBuffer(cmdBuffer));
 }
 
-void Application::mainloop()
+void Application::run()
 {
 	int currentFrame = 0;
 	while (!glfwWindowShouldClose(m_window))

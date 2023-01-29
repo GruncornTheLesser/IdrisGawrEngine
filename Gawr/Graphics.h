@@ -14,6 +14,7 @@ class Application {
 		static void glfwError(int, const char* message);
 	};
 	friend struct Application::Callback;
+
 public:
 	//context
 	const std::vector<const char*> instanceExtensions = {
@@ -35,6 +36,7 @@ public:
 
 	~Application();
 
+	void run();
 private:
 	// context
 	/* create vulkan instance*/
@@ -54,7 +56,6 @@ private:
 	/*creates swapchain Images *REQUIRES SWAPCHAIN* */
 	void createImages();
 
-
 	// shader
 	/*creates command pool*/
 	void createCommandPool();
@@ -67,16 +68,9 @@ private:
 
 	void recordCommandBuffer(VkCommandBuffer cmdBuffer, uint32_t imageIndex);
 
-
-
-
 	void prepareFrame(uint32_t currentFrame);
 
 	void submitFrame(uint32_t currentFrame);
-
-	void mainloop();
-
-
 
 	void recreateSwapChain();
 

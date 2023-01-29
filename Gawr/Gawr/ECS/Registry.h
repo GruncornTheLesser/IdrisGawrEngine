@@ -1,7 +1,7 @@
 #pragma once
 #include "HandleManager.h"
 #include "Pool.h"
-#include "EventDispatcher.h"
+#include "Dispatcher.h"
 
 
 namespace Gawr::ECS 
@@ -10,7 +10,6 @@ namespace Gawr::ECS
 	class Registry : public HandleManager
 	{
 	public:
-
 		template<typename ... ts>
 		class View;
 
@@ -25,9 +24,10 @@ namespace Gawr::ECS
 
 		template<typename t> requires (std::is_same_v<t, comp_ts> || ...)
 		Pool<t>& pool() {
-			return std::get<Pool<t>>(m_pools);
+			return std::get<Pool<t>>(m_storage);
 		}
 
-		std::tuple<Pool<comp_ts>...> m_pools;
+	private:
+		std::tuple<Pool<comp_ts>...> m_storage;
 	};
 }

@@ -176,9 +176,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Graphics.cpp" />
-    <ClCompile Include="Gawr\Core\Context.cpp" />
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Gawr\Core\Window.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="Resources\shader.frag">
@@ -190,17 +188,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Gawr\Application.h" />
-    <ClInclude Include="Gawr\Core\Context.h" />
     <ClInclude Include="Gawr\ECS\Entity.h" />
-    <ClInclude Include="Gawr\ECS\EventDispatcher.h" />
+    <ClInclude Include="Gawr\ECS\Dispatcher.h" />
     <ClInclude Include="Gawr\ECS\Filters.h" />
     <ClInclude Include="Gawr\ECS\HandleManager.h" />
     <ClInclude Include="Gawr\ECS\Registry.h" />
     <ClInclude Include="Gawr\ECS\Pool.h" />
     <ClInclude Include="Gawr\ECS\View.h" />
     <ClInclude Include="Graphics.h" />
-    <ClInclude Include="Gawr\Core\GawrVK.h" />
-    <ClInclude Include="Gawr\Core\Window.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
