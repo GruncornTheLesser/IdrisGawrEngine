@@ -187,11 +187,16 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Gawr\Application.h" />
+    <ClInclude Include="Gawr\ECS.h" />
     <ClInclude Include="Gawr\ECS\Entity.h" />
     <ClInclude Include="Gawr\ECS\Dispatcher.h" />
     <ClInclude Include="Gawr\ECS\Filters.h" />
     <ClInclude Include="Gawr\ECS\HandleManager.h" />
+    <ClInclude Include="Gawr\ECS\Entity.h" />
+    <ClInclude Include="Gawr\ECS\View.h" />
+    <ClInclude Include="Gawr\ECS\Pipeline.h" />
+    <ClInclude Include="Gawr\ECS\Pool.h" />
+    <ClInclude Include="Gawr\ECS\Registry.h" />
     <ClInclude Include="Gawr\ECS\Registry.h" />
     <ClInclude Include="Gawr\ECS\Pool.h" />
     <ClInclude Include="Gawr\ECS\View.h" />

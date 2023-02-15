@@ -836,6 +836,7 @@ void Application::run()
 		// wait for previous frame
 		VK_ASSERT(vkWaitForFences(m_logicalDevice, 1, &m_frames[currentFrame].m_inFlight, VK_TRUE, UINT64_MAX));
 
+		// acquire next image
 		uint32_t currentImage;
 		{
 			VkResult result = vkAcquireNextImageKHR(m_logicalDevice, m_swapChain, UINT64_MAX, m_frames[currentFrame].m_imageAvailable, VK_NULL_HANDLE, &currentImage);
@@ -850,14 +851,18 @@ void Application::run()
 			else VK_ASSERT(result);
 		}
 
+
+		//reset current fence & current cmd buffer
 		VK_ASSERT(vkResetFences(m_logicalDevice, 1, &m_frames[currentFrame].m_inFlight));
 		VK_ASSERT(vkResetCommandBuffer(m_frames[currentFrame].m_cmdBuffer, 0));
 
+		// begin record cmd buffer
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-		VK_ASSERT(vkBeginCommandBuffer(m_frames[currentFrame].m_cmdBuffer, &beginInfo));
 
+
+		VK_ASSERT(vkBeginCommandBuffer(m_frames[currentFrame].m_cmdBuffer, &beginInfo));
 		recordCommandBuffer(m_frames[currentFrame].m_cmdBuffer, currentImage);
 
 		VkSemaphore waitSemaphores[] = { m_frames[currentFrame].m_imageAvailable };
@@ -865,6 +870,7 @@ void Application::run()
 		VkSemaphore signalSemaphores[] = { m_frames[currentFrame].m_renderFinished };
 		VkCommandBuffer commandBuffers[] = { m_frames[currentFrame].m_cmdBuffer };
 
+		// submit buffers (only 1 cmd buffer atm)
 		VkSubmitInfo submitInfo{};
 		{
 			submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -878,6 +884,7 @@ void Application::run()
 		}
 
 		VK_ASSERT(vkQueueSubmit(m_graphicsQueue, 1, &submitInfo, m_frames[currentFrame].m_inFlight));
+		
 		// iterate frame
 		currentFrame = (++currentFrame == m_frames.size()) ? 0 : currentFrame;
 

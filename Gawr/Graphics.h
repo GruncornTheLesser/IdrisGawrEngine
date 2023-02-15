@@ -94,10 +94,11 @@ private:
 	VkFormat					m_surfaceFormat;
 
 	struct SwapchainImage {
-		VkImage					m_image;
-		VkImageView				m_view;
-		VkFramebuffer			m_framebuffer;
+		VkImage			m_image;
+		VkImageView		m_view;
+		VkFramebuffer	m_framebuffer;
 	};
+
 	std::vector<SwapchainImage> m_swapChainImages;
 
 	VkQueue						m_presentQueue;

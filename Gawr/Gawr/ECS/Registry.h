@@ -1,33 +1,38 @@
 #pragma once
-#include "HandleManager.h"
+#include "Pipeline.h"
 #include "Pool.h"
-#include "Dispatcher.h"
+#include "View.h"
 
+#include <tuple>
 
-namespace Gawr::ECS 
-{
-	template<typename ... comp_ts>
-	class Registry : public HandleManager
-	{
+namespace Gawr::ECS {
+	template<typename ... Ts>
+	class Registry {
+		using pool_collection_t = std::tuple<Pool<std::remove_const_t<Ts>>...>;
+
+		template<typename U>
+		using pool_t = Pool<std::remove_const_t<U>>;
+
+		template<typename U>
+		using pool_reference_t = std::conditional_t<std::is_const_v<U>, const Pool<std::remove_const_t<U>>&, Pool<std::remove_const_t<U>>&>;
+
 	public:
-		template<typename ... ts>
-		class View;
-
-		Registry() = default;
-		Registry(const Registry&) = delete;
-		const Registry& operator=(const Registry&) = delete;
-
-		template<typename ... filter_ts>
-		View<filter_ts...> view() {
-			return View<filter_ts...>(*this);
+		template<typename ... Us>
+		auto pipeline() {
+			return Pipeline<Registry, Us...>{ *this };
 		}
 
-		template<typename t> requires (std::is_same_v<t, comp_ts> || ...)
-		Pool<t>& pool() {
-			return std::get<Pool<t>>(m_storage);
+		template<typename U>
+		pool_reference_t<U> pool() {
+			return std::get<pool_t<U>>(m_pools);
+		}
+
+		template<typename ... Us, typename ... Inc_Ts, typename ... Exc_Ts>
+		auto view(ExcludeFilter<Exc_Ts...> exclude = ExcludeFilter<>{}, IncludeFilter<Inc_Ts... > include = IncludeFilter<>{}) {
+			return View<Pipeline, GetFilter<Us...>, ExcludeFilter<Exc_Ts...>, IncludeFilter<Inc_Ts...>>{ *this };
 		}
 
 	private:
-		std::tuple<Pool<comp_ts>...> m_storage;
+		pool_collection_t m_pools;
 	};
 }
