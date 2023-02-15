@@ -5,151 +5,132 @@
 #include <mutex>
 #include <typeindex>
 #include <functional>
+#include <shared_mutex>
+#include <random>
 
 #include "Gawr/Application.h"
+
 //#include "Gawr/ECS/Registry.h"
 
 //using namespace Gawr::ECS;
 
 namespace v2 {
-	// header
-	using entity_t = uint32_t;
-	constexpr uint32_t tombstone = std::numeric_limits<uint32_t>::max();
+	// forward declarations
 
-	class registry;
+	/// @brief an uint ID to represent a collection of unique components
+	using Entity = uint32_t;
+	
+	/// @brief an ordered set of entities with a sparse set lookup and a corresponding component
+	/// @tparam the component type
+	template<typename T>
+	class Pool;
+	
+	/// @brief a pipeline represents a reference to a registry. 
+	/// @tparam Reg_T - the registry type
+	/// @tparam Ts - defines the component read write access. eg 'const T' or 'T'
+	template<typename Reg_T,  typename ... Ts>
+	class Pipeline;
 
-	template<typename ... comp_ts>
-	class typed_registry;
-	class type_erased_registry;
+	/// @brief an inlude filter.
+	/// @tparam ...Ts the components that must be present to validate an entity
+	template<typename ... Ts>
+	struct IncludeFilter;
 
-	// view filters
-	template<typename ... get_arg_ts>
-	struct get_filter { };
+	/// @brief an exclude filter.
+	/// @tparam ...Ts  the components that must be absent to validate an entity
+	template<typename ... Ts>
+	struct ExcludeFilter;
 
-	template<typename ... inc_ts>
-	struct inc_filter { };
+	/// @brief a get filter. Types are automatically included and retrieved when iterating in a view
+	/// @tparam ...Ts the components are retrieved from the entity 
+	template<typename ... Ts>
+	struct GetFilter;
 
-	template<typename ... exc_ts>
-	struct exc_filter { };
+	template<typename Reg_T, typename ... Filter_Ts>
+	class View;
 
-	template<typename get_t, typename include_t, typename exclude_t>
-	class view;
+	template<typename T>
+	class Pool {
+		template<typename Reg_T, typename ... Us>
+		friend class Pipeline; // for the lock/unlock business
+		
+		template<typename ... Arg_Ts>
+		using reorder_func_t = void(*)(std::vector<Entity>::iterator, std::vector<Entity>::iterator, Arg_Ts&&...);
 
-	template<typename ... args>
-	class dispatcher;
+		using get_return_t = std::conditional_t<std::is_empty_v<T>, void, T&>;
 
-	template<typename comp_t>
-	class pool;
+		static constexpr auto tombstone = std::numeric_limits<uint32_t>::max();
 
-	template<typename ... arg_ts>
-	class dispatcher {
 	public:
-		using event_t = void(*)(arg_ts...);
-
-		void connect(event_t func) {
-			auto it = std::find(m_storage.begin(), m_storage.end(), func);
-
-			if (it == m_storage.end())
-				m_storage.push_back(func);
-		}
-
-		void disconnect(event_t func) {
-			auto it = std::find(m_storage.begin(), m_storage.end(), func);
-
-			if (it != m_storage.end())
-				m_storage.erase(it);
-		}
-		void dispatch(arg_ts ... args)
-		{
-			for (event_t func : m_storage)
-				func(args...);
-		}
-
-	private:
-		std::vector<event_t> m_storage;
-	};
-
-	template<typename comp_t>
-	class pool {
-	public:
-		struct reference : std::reference_wrapper<pool>, std::lock_guard<std::mutex> {
-			reference(pool* p)
-				: std::reference_wrapper<pool>(p), 
-				  std::lock_guard<std::mutex>(p.m_mutex) 
-			{ }
-		};
-		using const_reference = const pool&;
-
-		using sparse_t = std::vector<size_t>;
-		using packed_t = std::vector<entity_t>;
-		using packed_comp_t = std::vector<comp_t>;
-		using get_return_t = std::conditional_t<std::is_empty_v<comp_t>, void, comp_t&>;
-		using dispatcher_t = dispatcher<registry&, entity_t>;
-
-		pool(registry& reg) : m_sparse(8, tombstone), m_reg(reg) { }
+		Pool() : m_sparse(8, tombstone) { }
 
 		size_t size() const {
 			return m_packed.size();
 		}
 
-		entity_t at(size_t i) const {
+		Entity at(size_t i) const {
 			return m_packed[i];
 		}
 
-		size_t index(entity_t e) const {
+		size_t index(Entity e) const {
 			return m_sparse[e];
 		}
 
-		bool contains(entity_t e) const {
+		bool contains(Entity e) const {
 			return e < m_sparse.size() && m_sparse[e] != tombstone;
 		}
 
-		comp_t& get_component(entity_t e) requires (!std::is_empty_v<comp_t>)
-		{
-			return m_comps[m_sparse[e]];
+		T& getComponent(Entity e) requires (!std::is_empty_v<T>) {
+			return m_components[m_sparse[e]];
 		}
 
-		template<typename ... args_ts> requires std::is_constructible_v<comp_t, args_ts...>
-		get_return_t emplace(entity_t e, args_ts&& ... args) {
-			if (m_sparse.size() <= e)
-				m_sparse.resize(e, tombstone);
-
-			m_sparse[e] = static_cast<uint32_t>(m_packed.size());
-			m_packed.push_back(e);
-
-			if constexpr (!std::is_empty_v<comp_t>)
-			{
-				m_comps.emplace_back(args...);
-				return m_comps.back();
-			}
+		const T& getComponent(Entity e) const requires (!std::is_empty_v<T>) {
+			return m_components[m_sparse[e]];
 		}
-
-		template<typename ... arg_ts> requires std::is_constructible_v<comp_t, arg_ts...>
-		get_return_t get_or_emplace(entity_t e, arg_ts&& ... args)
-		{
-			if constexpr (std::is_empty_v<comp_t>)
+		
+		template<typename ... Arg_Ts>
+		get_return_t emplace(Entity e, Arg_Ts&& ... args) {
+			if (contains(e))
 			{
-				if (!contains(e)) emplace(e, args...);
+				if constexpr (!std::is_empty_v<T>)
+				{
+					return m_components[m_sparse[e]] = T(std::forward<Arg_Ts>(args)...);
+				}
+				else
+				{
+					return;
+				}
 			}
 			else
 			{
-				return contains(e) ? get_component(e) : emplace(e, args...);
+				if (m_sparse.size() <= e)
+					m_sparse.resize(e + 1, tombstone);
+
+				m_sparse[e] = m_packed.size();
+				m_packed.push_back(e);
+
+				if constexpr (!std::is_empty_v<T>)
+				{
+					m_components.emplace_back(args...);
+					return m_components.back();
+				}
 			}
 		}
 
-		void swap(entity_t e1, entity_t e2) {
+		void swap(Entity e1, Entity e2) {
 			size_t i1 = m_sparse[e2], i2 = m_sparse[e1];
+
 			std::swap(m_sparse[e1], m_sparse[e2]);
 			std::swap(m_packed[i1], m_packed[i2]);
-			if constexpr (!std::is_empty_v<comp_t>) std::swap(m_comps[i1], m_comps[i2]);
 
+			if constexpr (!std::is_empty_v<T>) std::swap(m_components[i1], m_components[i2]);
 		}
 
 		void erase(size_t i) {
-			if constexpr (!std::is_empty_v<comp_t>)
+			if constexpr (!std::is_empty_v<T>)
 			{
-				m_comps[i] = m_comps.back();
-				m_comps.pop_back();
+				m_components[i] = m_components.back();
+				m_components.pop_back();
 			}
 
 			m_sparse[m_packed[i]] = tombstone;
@@ -159,149 +140,143 @@ namespace v2 {
 			m_packed.pop_back();
 		}
 
-		void remove(entity_t e) {
+		void remove(Entity e) {
 			erase(index(e));
 		}
 
+		template<typename ... Arg_Ts>
+		void reorder(reorder_func_t<Arg_Ts...> func, Arg_Ts&& ... args) {
 
-		/// <summary>
-		/// executes function that reorders the collection and then updates sparse lookup data
-		/// eg 
-		/// reorder(std::reverse);
-		/// reorder(std::sort, [](entity_t lhs, entity_t rhs) { return lhs < rhs; });
-		/// reorder(std::shuffle, rng);
-		/// 
-		/// </summary>
-		/// <param name="func">a function that takes 2 iterator parameters for begin and end the optional arg parameters</param>
-		/// <param name="...args">optional arg parameters are appended after iterators</param>
-		template<typename ... arg_ts>
-		void reorder(void(*func)(std::vector<entity_t>::iterator, std::vector<entity_t>::iterator, arg_ts...), arg_ts&& ... args) {
-			
-			func(m_packed.begin(), m_packed.end(), args...);
+			func(m_packed.begin(), m_packed.end(), std::forward<Arg_Ts>(args)...);
 
-			for (size_t pos = 0; pos < m_packed.size(); pos++)
+			if (std::is_empty_v<T>)
 			{
-
-				// e1 = packed[pos]
-				// curr = index
-				size_t curr = m_sparse[m_packed[pos]];	// index that curr entity used to be stored at
-
-				while (curr != pos) // if curr == next component in the correct place
+				for (size_t i = 0; i < m_packed.size(); i++)				// iterate through the packed to update the lookup in the sparse array
+					m_sparse[m_packed[i]] = i;
+			}
+			else
+			{
+				for (size_t pos = 0; pos < m_packed.size(); pos++)			// iterate through starting index
 				{
-					size_t next = m_sparse[m_packed[curr]];
-					
-					if constexpr (!std::is_empty_v<comp_t>) 
-						std::swap(m_comps[curr], m_comps[next]);
+					size_t curr = m_sparse[m_packed[pos]];					// index that entity at pos used to be stored at
 
-					m_sparse[m_packed[curr]] = curr;
+					while (curr != pos)										// if curr == pos, component is in the correct index
+					{
+						size_t next = m_sparse[m_packed[curr]];				// index that entity at curr used to be stored at
 
+						m_sparse[m_packed[curr]] = curr;					// set sparse lookup for curr to the new index
+						std::swap(m_components[curr], m_components[next]);	// move component at curr to correct position
 
-					curr = next;
-				};
+						curr = next;										// set curr to next
+					}
 
-				m_sparse[m_packed[pos]] = pos;
+					m_sparse[m_packed[curr]] = pos;							// when I remove this it breaks. must be important.
+				}
 			}
 		}
 
-		dispatcher_t& onCreate() {
-			return m_onCreate;
-		}
-
-		dispatcher_t& onDestroy() {
-			return m_onDestroy;
-		}
-
-		dispatcher_t& onUpdate() {
-			return m_onUpdate;
-		}
-
 	private:
-		packed_comp_t m_comps;
-		sparse_t m_sparse;
-		packed_t m_packed;
+		void lock() { m_mtx.lock(); }
+		void unlock() { m_mtx.unlock(); }
 
-		std::mutex m_mutex;
+		void lock() const { m_mtx.lock_shared(); }
+		void unlock() const { m_mtx.unlock_shared(); }
 
-		registry& m_reg;
+		std::vector<T>			m_components;
+		std::vector<size_t>		m_sparse;
+		std::vector<Entity>		m_packed;
 
-		dispatcher_t m_onCreate;
-		dispatcher_t m_onDestroy;
-		dispatcher_t m_onUpdate;
+		mutable std::shared_mutex m_mtx;
 	};
 
-	class registry {
-	private:
-		template<typename t>
-		struct type_erased_deleter : std::function<void(void*)> {
-			type_erased_deleter() : std::function<void(void*)>{ [](void* ptr) { delete reinterpret_cast<t*>(ptr); } } { }
-		};
+	template<typename ... Ts>
+	class Registry {
+		using pool_collection_t = std::tuple<Pool<std::remove_const_t<Ts>>...>;
 
-		template<typename t>
-		using typed_ptr = std::unique_ptr<t, type_erased_deleter<t>>;
-		using type_erased_ptr = std::unique_ptr<void, std::function<void(void*)>>;
-		
-		template<typename t>
-		using pool_reference_t = std::conditional_t<std::is_const_v<t>, typename pool<std::remove_cvref_t<t>>::const_reference, typename pool<std::remove_cvref_t<t>>::reference>;
+		template<typename U>
+		using pool_t = Pool<std::remove_const_t<U>>;
 
-		using pool_collection_t = std::unordered_map<std::type_index, type_erased_ptr>;
+		template<typename U>
+		using pool_reference_t = std::conditional_t<std::is_const_v<U>, const Pool<std::remove_const_t<U>>&, Pool<std::remove_const_t<U>>&>;
 
 	public:
-		registry() = default;
-
-		registry(const registry&) = delete;
-		const registry& operator=(const registry&) = delete;
-
-		template<typename t> 
-		v2::pool<t>& pool() {
-			auto key = std::type_index(typeid(std::remove_cvref_t<t>));
-			auto it = m_pools.find(key);
-
-			if (it == m_pools.end())
-				it = m_pools.emplace(key, typed_ptr<v2::pool<t>>(new v2::pool<std::remove_cvref_t<t>>(*this))).first;
-
-			return *reinterpret_cast<v2::pool<std::remove_cvref_t<t>>*>(it->second.get());
+		template<typename U>
+		pool_reference_t<U> pool() {
+			return std::get<pool_t<U>>(m_pools);
 		}
 
-		template<typename ... get_ts, typename ... inc_ts, typename ... exc_ts> 
-			requires (!(std::is_reference_v<get_ts> && ...) && !(std::is_pointer_v<get_ts> && ...))
-			auto view(inc_filter<inc_ts...> = inc_filter<>{}, exc_filter<exc_ts...> exclude = exc_filter<>{})
-		{
-			return v2::view<get_filter<get_ts...>,
-				inc_filter<std::remove_cv_t<get_ts>..., std::remove_cv_t<inc_ts>...>,
-				exc_filter<std::remove_cv_t<exc_ts>...>>(*this);
+		template<typename ... Us>
+		auto pipeline() {
+			return Pipeline<Registry, Us...>{ *this };
+		}
+
+		template<typename ... Us, typename ... Inc_Ts, typename ... Exc_Ts>
+		auto view(ExcludeFilter<Exc_Ts...> exclude = ExcludeFilter<>{}, IncludeFilter<Inc_Ts... > include = IncludeFilter<>{}) {
+			return View<Pipeline, GetFilter<Us...>, ExcludeFilter<Exc_Ts...>, IncludeFilter<Inc_Ts...>>{ *this };
 		}
 
 	private:
 		pool_collection_t m_pools;
 	};
 
-	template<typename ... get_arg_ts, typename ... inc_arg_ts, typename ... exc_arg_ts>
-	class view<get_filter<get_arg_ts...>, inc_filter<inc_arg_ts...>, exc_filter<exc_arg_ts...>> {
+	template<typename ... Ts>
+	struct IncludeFilter {
+		template<typename Reg_T>
+		static bool valid(Reg_T& reg, Entity e) {
+			return (reg.pool<Ts>().contains(e) && ...);
+		}
+	};
 
-		using pool_collection_t = std::tuple<pool<inc_arg_ts>&..., pool<exc_arg_ts>&...>;
+	template<typename ... Ts>
+	struct ExcludeFilter {
+		template<typename Reg_T>
+		static bool valid(Reg_T& reg, Entity e) {
+			return !(reg.template pool<Ts>().contains(e) || ...);
+		}
+	};
 
-		using return_t = decltype(std::tuple_cat(std::tuple<entity_t>{}, std::declval<std::conditional_t<std::is_empty_v<std::remove_cv_t<get_arg_ts>>, std::tuple<>, std::tuple<get_arg_ts&>>>()...));
+	template<typename ... Ts>
+	struct GetFilter : IncludeFilter<Ts...> {
+		using orderby_t = std::tuple_element_t<0, std::tuple<Ts...>>;
 
-		using orderby_t = pool<std::remove_cv_t<std::tuple_element_t<0, std::tuple<get_arg_ts...>>>>&;
+		template<typename Reg_T> 
+		static auto retrieve(Reg_T& reg, Entity e) {
+			return std::tuple_cat(std::tuple(e), [&]<typename Comp_T>()->auto
+			{
+				if constexpr (!std::is_empty_v<Comp_T>)
+					return std::tuple<Comp_T&>{ reg.template pool<Comp_T>().getComponent(e) };
+				else
+					return std::tuple<>{};
+			}.operator()<Ts>() ...);
+		}
+	};
 
+
+
+	template<typename Registry_T, typename ... Filter_Ts>
+	class View {
+		using RetrieveFilter = std::tuple_element_t<0, std::tuple<Filter_Ts...>>;
+		using orderby_t = RetrieveFilter::orderby_t;
 	public:
 		class Iterator {
 		public:
-			Iterator(view& view, size_t index) : m_view(view), m_index(index) { }
+			using iterator_category = std::bidirectional_iterator_tag;
+			using difference_type = std::ptrdiff_t;
 
-			auto operator*()
-			{
-				return m_view[m_index];
-			}
+			Iterator(Registry_T& reg, size_t index)
+				: m_reg(reg), m_index(index) { }
 
-			Iterator& operator++()
-			{
-				m_view.next(m_index);
-				return *this;
+			auto operator*() {
+				Entity e = m_reg.template pool<orderby_t>().at(m_index);
+				return RetrieveFilter::retrieve(m_reg, e);
 			}
 
 			Iterator& operator--() {
-				m_view.prev(m_index);
+				while (++m_index != m_reg.template pool<orderby_t>().size() && !valid());
+				return *this;
+			}
+			Iterator& operator++() {
+				while (--m_index != -1 && !valid());
 				return *this;
 			}
 
@@ -311,6 +286,7 @@ namespace v2 {
 				++(*this);
 				return temp;
 			}
+
 			Iterator operator--(int) {
 				Iterator temp = *this;
 				--(*this);
@@ -325,125 +301,180 @@ namespace v2 {
 			};
 
 		private:
-			view& m_view;
+			bool valid() {
+				Entity e = m_reg.pool<orderby_t>().at(m_index);
+				return (Filter_Ts::valid(m_reg, e) && ...);
+			}
+
+			Registry_T& m_reg;
 			size_t m_index;
 		};
 
-		template<typename ... locked_ts>
-		view(registry& reg) : m_pools(reg.pool<inc_arg_ts>()..., reg.pool<exc_arg_ts>()...) { }
-
-		view(const view&) = delete;
-		const view& operator=(const view&) = delete;
-
-		view(view&&) = delete;
-		const view& operator=(view&&) = delete;
-
-		return_t operator[](int i) {
-			entity_t e = std::get<orderby_t>(m_pools).at(i);
-			return std::tuple<entity_t, get_arg_ts&...>(e, std::get<pool<std::remove_cv_t<get_arg_ts>>&>(m_pools).get_component(e)...);
-		}
+		View(Registry_T& reg) : m_reg(reg) { }
 
 		Iterator begin() {
-			size_t i = std::get<orderby_t>(m_pools).size();
-			next(i);
-			return Iterator(*this, i);
+			return ++Iterator{ m_reg, m_reg.pool<orderby_t>().size() };
 		}
 
 		Iterator end() {
-			size_t i = -1;
-			prev(i);
-			return Iterator(*this, i - 1);
-		}
-
-		void next(size_t& i) const {
-			while (--i != -1 && !valid(i)) {}
-		}
-
-		void prev(size_t& i) const {
-			while (++i != std::get<orderby_t>(m_pools).size() && !valid(i)) {}
-		}
-
-		bool valid(size_t i) const {
-			entity_t e = std::get<orderby_t>(m_pools).at(i);
-			return (std::get<pool<inc_arg_ts>&>(m_pools).contains(e) && ...) &&
-				!(std::get<pool<exc_arg_ts>&>(m_pools).contains(e) || ...);
+			return Iterator{ m_reg, static_cast<size_t>(-1) };
 		}
 
 	private:
-		pool_collection_t m_pools;
+		Registry_T& m_reg;
 	};
 
-	
+	template<template<typename...> typename Reg_T, typename ... Reg_Ts, typename ... Ts>
+	class Pipeline<Reg_T<Reg_Ts...>, Ts...> {
+		template<typename U>
+		using pool_reference_t = std::conditional_t<std::is_const_v<U>, const Pool<std::remove_const_t<U>>&, Pool<std::remove_const_t<U>>&>;
 
+		template<typename U>
+		static bool constexpr stored_as_non_const = (std::is_same_v<std::remove_const_t<U>, Ts> || ...);
 
+		template<typename U>
+		static bool constexpr stored_as_const = (std::is_same_v<const std::remove_const_t<U>, Ts> || ...);
 
+		template<typename U>
+		static bool constexpr stored = (std::is_same_v<std::remove_const_t<U>, std::remove_const_t<Ts>> || ...);
+
+	public:
+		Pipeline(Reg_T<Reg_Ts...>& reg) : m_reg(reg)
+		{
+			// for each type in reg -> orderedby registry so consistent locking order
+			([&]<typename U>()->void
+			{
+				// if in non const pipeline
+				if constexpr ((std::is_same_v<U, Ts> || ...))
+					m_reg.template pool<U>().lock();
+
+				// if const in pipeline
+				if constexpr ((std::is_same_v<const U, Ts> || ...))
+					m_reg.template pool<const U>().lock();
+
+			}.operator()<Reg_Ts>(), ...);
+			
+		}
+
+		~Pipeline() {
+			// for each type in pipeline
+			(m_reg.template pool<Ts>().unlock(), ...);
+		}
+		
+		template<typename U>
+		auto& pool() {
+			static_assert(stored_as_non_const<U> || (stored_as_const<U> && std::is_const_v<U>), 
+				"requested pool is not managed by this pipeline");
+
+			return m_reg.template pool<U>();			
+		}
+
+		template<typename ... Us, typename ... Inc_Ts, typename ... Exc_Ts>
+		auto view(ExcludeFilter<Exc_Ts...> exclude = ExcludeFilter<>{}, IncludeFilter<Inc_Ts... > include = IncludeFilter<>{}) {
+			static_assert(((stored_as_non_const<Us> || (stored_as_const<Us> && std::is_const_v<Us>)) && ...),
+				"requested get component/s in view is not accessible by this pipeline");
+			static_assert((stored<Inc_Ts> && ...), 
+				"requested include component/s in view is not accessible by this pipeline");
+			static_assert((stored<Exc_Ts> && ...),
+				"requested exclude component/s in view is not accessible by this pipeline");
+
+			return View<Pipeline, GetFilter<Us...>, ExcludeFilter<Exc_Ts...>, IncludeFilter<Inc_Ts...>>{ *this };
+		}
+
+		template<typename ... Us>
+		auto pipeline() {
+			static_assert((stored_as_const<Us> && ...), 
+				"cannot create sub-pipeline using non const component");
+
+			return Pipeline<Pipeline<Reg_T<Reg_Ts...>, Ts...>, Us...>{ *this };
+		}
+
+	private:
+		Reg_T<Reg_Ts...>& m_reg;
+	};
 }
 
-#include <thread>
-#include <type_traits>
-#include <random>
+namespace testing {
+	using namespace v2;
 
+	struct A {
+		void stuff() { };
+		void const_stuff() const {};
+		int a;
+	};
 
-using namespace v2;
+	struct B {
+		void stuff() { };
+		void const_stuff() const {};
+		int b;
+	};
+	struct C { };
 
-struct A { 
-	void stuff() { }; 
-	void const_stuff() const {}; 
-	int data; 
-};
+	
+	void read(Registry<A, B, C>& reg, std::string name) {
+		auto pipline = reg.pipeline<const A>();
+		auto& pool = pipline.pool<const A>();
 
-struct B { int b; };
-struct C { };
+		std::cout << name << " read open\n";
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		std::cout << name << " read close\n";
+	}
 
+	void write(Registry<A, B, C>& reg, std::string name) {
+		auto pipline = reg.pipeline<A>();
+		auto& pool = pipline.pool<A>();
 
-void shuffle(std::vector<entity_t>::iterator begin, std::vector<entity_t>::iterator end, std::mt19937 rng) {
-	std::shuffle(begin, end, rng);
+		std::cout << name << " write open\n";
+		std::this_thread::sleep_for(std::chrono::milliseconds(500));
+		std::cout << name << " write close\n";
+	}
 }
 
 
 int main() 
 {
-	registry reg;
-	reg.pool<A>().emplace(0, 0);
-	reg.pool<A>().emplace(1, 1);
-	reg.pool<A>().emplace(2, 2);
-	reg.pool<A>().emplace(3, 3);
-	reg.pool<A>().emplace(4, 4);
-	reg.pool<A>().emplace(5, 5);
-	reg.pool<A>().emplace(6, 6);
+	using namespace testing;
 
-	std::mt19937 rng{};
-	reg.pool<A>().reorder(std::shuffle, rng);
+	Registry<A, B, C> reg;
+	{
+		auto pip1 = reg.pipeline<const A, B>();
 
-	for (auto [e, a] : reg.view<const A>()) std::cout << a.data;
-	std::cout << std::endl;
+		//Pool<A>& p1 =		pip1.pool<A>();
+		const Pool<A>& p2 = pip1.pool<const A>();
+		const Pool<B>& p3 = pip1.pool<const B>();
+		Pool<B>& p4 =		pip1.pool<B>();
+
+
+		for (auto [e, a, b] : pip1.view<const A, B>(ExcludeFilter<B>{}))
+		{
+			a.const_stuff();
+			b.const_stuff();
+			b.stuff();
+		}
+
+
+
+		auto& p = reg.pool<A>();
+		for (int i = 0; i < 20; i++)
+			p.emplace(i, i);
+
+	}
+
+	std::thread t1(read, std::ref(reg), "t1");
+	std::thread t2(read, std::ref(reg), "t2");
+	std::thread t3(write, std::ref(reg), "t3");
+	std::thread t4(write, std::ref(reg), "t4");
+
+	std::thread t5(read, std::ref(reg), "t5");
+	std::thread t6(write, std::ref(reg), "t6");
+	std::thread t7(read, std::ref(reg), "t7");
 	
-	reg.pool<A>().reorder(std::reverse);
-
-	for (auto [e, a] : reg.view<const A>()) std::cout << a.data;
-	std::cout << std::endl;
+	t1.join();
+	t2.join();
+	t3.join();
+	t4.join();
+	t5.join();
+	t6.join();
+	t7.join();
 	
-	reg.pool<A>().reorder(std::sort, [](entity_t e1, entity_t e2) { return e1 < e2; });
-
-	for (auto [e, a] : reg.view<const A>()) std::cout << a.data;
-	std::cout << std::endl;
-
-	
-	//packed.push_back(0);
-		
-	
-	//for (uint32_t i = 0; i < 5; i++) reg.pool<A>().emplace(i, i);
-
-	//for (auto [e, a] : reg.view<const A>()) { std::cout << a.data; }
-
-	//for (auto [e, a, b] : reg.view<const A, B>()) {}
-
-	
-	
-
-
-	//Dispatcher<A> dis;
-	//dis.connect([](A a) {});
-
-	//Application().run();
 }
