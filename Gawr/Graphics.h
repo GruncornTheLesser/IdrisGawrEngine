@@ -15,6 +15,9 @@ class Application {
 	};
 	friend struct Application::Callback;
 
+	struct SwapchainImage;
+	struct Frame;
+
 public:
 	//context
 	const std::vector<const char*> instanceExtensions = {
@@ -66,59 +69,89 @@ private:
 	
 	VkShaderModule loadShader(std::string& filepath);
 
-	void recordCommandBuffer(VkCommandBuffer cmdBuffer, uint32_t imageIndex);
+	uint32_t acquireImage(Frame& frame);
 
-	void prepareFrame(uint32_t currentFrame);
+	void beginRender(Frame& frame, uint32_t imageIndex);
+	
+	void recordRender(Frame& frame);
 
-	void submitFrame(uint32_t currentFrame);
+	void submitRender(Frame& frame, uint32_t imageIndex);
 
 	void recreateSwapChain();
 
-	/*gets the index of the queue family which matches flag*/
-	uint32_t getQueueFamilyIndex(VkQueueFlagBits flag);
-	/*gets the index of queue family which supports presentation(ie rendering to the screen)*/
-	uint32_t getQueueFamilyIndexPresent();
+	void getQueueFamilies();
 
+	// Application
 	VkInstance					m_instance;
 	VkPhysicalDevice			m_physicalDevice;
 	VkDevice					m_logicalDevice;
 
+	// window
 	GLFWwindow*					m_window;
 	VkSurfaceKHR				m_surface;
 
-	VkRenderPass				m_renderPass;
-
-	VkSwapchainKHR				m_swapChain;
-	VkExtent2D					m_swapChainExtent;
-	VkPresentModeKHR			m_swapChainPresentMode;
 	VkFormat					m_surfaceFormat;
+	VkExtent2D					m_surfaceExtent;
+
+	// renderer
+	VkRenderPass				m_renderPass;
+	VkSwapchainKHR				m_swapchain;	
+	VkQueue						m_presentQueue;
+	uint32_t					m_presentQueueIndex;
+	VkQueue						m_graphicsQueue;
+	uint32_t					m_graphicsQueueIndex;
 
 	struct SwapchainImage {
 		VkImage			m_image;
 		VkImageView		m_view;
 		VkFramebuffer	m_framebuffer;
 	};
-
-	std::vector<SwapchainImage> m_swapChainImages;
-
-	VkQueue						m_presentQueue;
-	VkQueue						m_graphicsQueue;
+	std::vector<SwapchainImage> m_swapchainImages;
 
 	VkCommandPool				m_cmdPool;			// 1 per thread
 
 	// Aim for 15-30 command buffers and 5-10 vkQueueSubmit() calls per frame
-	struct Renderer {
+	struct Frame {
 		VkCommandBuffer m_cmdBuffer;
 		VkSemaphore		m_imageAvailable;
 		VkSemaphore		m_renderFinished;
 		VkFence			m_inFlight;
 	};
-	std::array<Renderer, 2>		m_frames;
+	std::array<Frame, 2> m_frames;
 
 	// shader program
 	VkPipelineLayout			m_pipelineLayout;
 	VkPipeline					m_graphicsPipeline;
-	
-	bool						m_resized = false;	
+
 };
 
+// Context
+	// Instance
+	// Device
+	// PhysicalDevice
+	
+// Window
+	// GLFW Window
+	// Surface
+	// Surface Format
+	// Surface Extent
+
+// RenderContext
+	// RenderPass
+	// Swapchain
+	
+	// SwapchainImages
+		// VkImage
+		// VkImageView
+		// VkFramebuffer
+
+	// Renderer
+		// cmdBuffer
+		// fences, semaphores -> etc
+		// 
+
+// ShaderProgram
+	// Pipeline Layout
+	// Pipeline
+
+// 

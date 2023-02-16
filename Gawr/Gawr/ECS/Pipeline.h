@@ -3,10 +3,12 @@
 #include "View.h"
 
 namespace Gawr::ECS {
-
+	/// @brief an access manager for multithreaded applications. 
+	/// @tparam Manager_T the parent registry or pipeline
+	/// @tparam ...Ts the access managed component eg 'const T' or 'T'
 	template<typename Manager_T, typename ... Ts>
 	class Pipeline;
-
+	
 	template<template<typename...> typename Manager_T, typename ... Reg_Ts, typename ... Ts>
 	class Pipeline<Manager_T<Reg_Ts...>, Ts...> {
 		template<typename U>

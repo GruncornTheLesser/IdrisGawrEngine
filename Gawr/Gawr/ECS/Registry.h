@@ -8,6 +8,9 @@
 namespace Gawr::ECS {
 	template<typename ... Ts>
 	class Registry {
+		template<typename Reg_T, typename ... Us>
+		friend class Pipeline;
+
 		using pool_collection_t = std::tuple<Pool<std::remove_const_t<Ts>>...>;
 
 		template<typename U>
@@ -21,17 +24,11 @@ namespace Gawr::ECS {
 		auto pipeline() {
 			return Pipeline<Registry, Us...>{ *this };
 		}
-
+	private:
 		template<typename U>
 		pool_reference_t<U> pool() {
 			return std::get<pool_t<U>>(m_pools);
 		}
-
-		template<typename ... Us, typename ... Inc_Ts, typename ... Exc_Ts>
-		auto view(ExcludeFilter<Exc_Ts...> exclude = ExcludeFilter<>{}, IncludeFilter<Inc_Ts... > include = IncludeFilter<>{}) {
-			return View<Pipeline, GetFilter<Us...>, ExcludeFilter<Exc_Ts...>, IncludeFilter<Inc_Ts...>>{ *this };
-		}
-
 	private:
 		pool_collection_t m_pools;
 	};

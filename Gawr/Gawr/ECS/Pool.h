@@ -5,6 +5,8 @@
 #include <shared_mutex>
 
 namespace Gawr::ECS {
+	/// @brief a sparse set lookup for entity to component. components are stored in a ordered vector unless component is an empty type.
+	/// @tparam T the component type
 	template<typename T>
 	class Pool {
 		template<typename Reg_T, typename ... Us>
@@ -121,7 +123,7 @@ namespace Gawr::ECS {
 						curr = next;										// set curr to next
 					}
 
-					m_sparse[m_packed[curr]] = pos;							// when I remove this it breaks. must be important.
+					m_sparse[m_packed[curr]] = pos;							// when I remove this it breaks -> must be important.
 				}
 			}
 		}
