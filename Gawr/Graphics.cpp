@@ -5,6 +5,8 @@
 
 #include <vulkan/vk_enum_string_helper.h>
 
+
+
 #include <stdexcept>
 #include <algorithm>
 #include <iterator>
@@ -49,13 +51,8 @@ void Application::Callback::glfwError(int, const char* message)
 Application::Application(const char* name)
 {
 	// context
-	int res = glfwInit();
-	assert(res == GLFW_TRUE);
-
 	createVkInstance();
-
 	getPhysicalDevice();
-
 	createLogicalDevice();
 
 	// window
@@ -69,12 +66,11 @@ Application::Application(const char* name)
 
 	createImages();
 	
-
-
-	
 	createCommandPool();
 
-	createFrames(); // creates cmd buffer semaphores and fences for each frame. 
+	createFrames(); 
+
+
 
 
 	// shaderProgram
@@ -149,6 +145,8 @@ void Application::createVkInstance()
 			throw std::runtime_error("vulkan version doesnt support required extensions");
 	}
 
+	assert(glfwInit() == GLFW_TRUE);
+
 	uint32_t glfwExtensionCount;
 	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
 	
@@ -198,8 +196,9 @@ void Application::getPhysicalDevice()
 
 void Application::createLogicalDevice()
 {
+	// initiate with validation layer
 #if defined(_DEBUG)
-// check validation layer support
+
 	uint32_t layerCount;
 	VK_ASSERT(vkEnumerateDeviceLayerProperties(m_physicalDevice, &layerCount, nullptr));
 
@@ -215,6 +214,7 @@ void Application::createLogicalDevice()
 			throw std::runtime_error("validation layer requested but not available on gpu");
 	}
 #endif
+
 	// query device extensions
 	{
 		uint32_t extensionCount;
@@ -236,6 +236,8 @@ void Application::createLogicalDevice()
 	{
 		vkGetPhysicalDeviceFeatures(m_physicalDevice, &deviceFeatures);
 	}
+
+	// get queue families
 
 	uint32_t queueFamilyCount;
 	vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueFamilyCount, nullptr);
@@ -286,12 +288,11 @@ void Application::createWindow(int width, int height, const char* title, bool fu
 
 void Application::createSwapChain()
 {
-	VkSurfaceCapabilitiesKHR capabilities{};
-	{
-		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physicalDevice, m_surface, &capabilities);
-		m_surfaceExtent = capabilities.currentExtent;
-	}
-	
+	// get surface capabilities
+	VkSurfaceCapabilitiesKHR capabilities{ };
+	vkGetPhysicalDeviceSurfaceCapabilitiesKHR(m_physicalDevice, m_surface, &capabilities);
+	m_surfaceExtent = capabilities.currentExtent;
+
 	// surface format
 	VkSurfaceFormatKHR surfaceFormat{};
 	{
@@ -314,7 +315,7 @@ void Application::createSwapChain()
 
 		std::vector<VkPresentModeKHR> availablePresentModes(presentModeCount);
 		VK_ASSERT(vkGetPhysicalDeviceSurfacePresentModesKHR(m_physicalDevice, m_surface, &presentModeCount, availablePresentModes.data()));
-
+		
 		presentMode = availablePresentModes[0];
 	}
 
@@ -417,7 +418,6 @@ void Application::createImages() {
 	}
 }
 
-
 void Application::createRenderPass()
 {
 	// surface format
@@ -485,7 +485,6 @@ void Application::createRenderPass()
 	VK_ASSERT(vkCreateRenderPass(m_logicalDevice, &renderInfo, nullptr, &m_renderPass));
 }
 
-
 void Application::getQueueFamilies()
 {
 	m_presentQueueIndex = -1, m_graphicsQueueIndex = -1;
@@ -497,7 +496,7 @@ void Application::getQueueFamilies()
 	std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
 	vkGetPhysicalDeviceQueueFamilyProperties(m_physicalDevice, &queueFamilyCount, queueFamilies.data());
 
-	
+
 	for (uint32_t i = 0; i < queueFamilyCount; i++)
 	{
 		VkBool32 surfaceSupport;
@@ -533,10 +532,10 @@ void Application::getQueueFamilies()
 				break;
 			}
 		}
-	}
 
-	if (m_presentQueueIndex == -1 || m_graphicsQueueIndex == -1)
-		throw std::runtime_error("device doesnt support graphics or device doesnt support presentation");
+		if (m_presentQueueIndex == -1 || m_graphicsQueueIndex == -1)
+			throw std::runtime_error("device doesnt support graphics or device doesnt support presentation");
+	}
 
 	vkGetDeviceQueue(m_logicalDevice, m_presentQueueIndex, 0, &m_presentQueue);
 	vkGetDeviceQueue(m_logicalDevice, m_graphicsQueueIndex, 0, &m_graphicsQueue);
@@ -558,15 +557,14 @@ void Application::createCommandPool()
 void Application::createFrames()
 {
 	VkCommandBufferAllocateInfo cmdBufferInfo{};
-	{
-		cmdBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-		cmdBufferInfo.commandPool = m_cmdPool;
-		cmdBufferInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-		cmdBufferInfo.commandBufferCount = 1;
-	}
+	cmdBufferInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	cmdBufferInfo.commandPool = m_cmdPool;
+	cmdBufferInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	cmdBufferInfo.commandBufferCount = 1;
 
 	VkSemaphoreCreateInfo semaphoreInfo{};
 	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
 	VkFenceCreateInfo fenceInfo{};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
 	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
@@ -612,34 +610,28 @@ void Application::createGraphicsPipeline()
 
 	VkShaderModule vertModule = loadShader(vertFilepath);
 	VkShaderModule fragModule = loadShader(fragFilepath);
-	std::vector<VkPipelineShaderStageCreateInfo> shaderStages;
+
+	std::vector<VkPipelineShaderStageCreateInfo> shaderStages
 	{
-		VkPipelineShaderStageCreateInfo vertStageInfo{};
-		{
-			vertStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			vertStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-
-			vertStageInfo.module = vertModule;
-			vertStageInfo.pName = "main";
-
-			// can specify compile time constants here
-			vertStageInfo.pSpecializationInfo = nullptr;
+		VkPipelineShaderStageCreateInfo {
+			VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			nullptr,					// pnext
+			0,							// flags
+			VK_SHADER_STAGE_VERTEX_BIT,	// stage
+			vertModule,					// module
+			"main",						// pName
+			nullptr,					// pSpeciaklizationInfo
+		},
+		VkPipelineShaderStageCreateInfo{
+			VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+			nullptr,						// pnext
+			0,								// flags
+			VK_SHADER_STAGE_FRAGMENT_BIT,	// stage
+			fragModule,						// module
+			"main",							// pName
+			nullptr,						// pSpeciaklizationInfo
 		}
-
-		VkPipelineShaderStageCreateInfo fragStageInfo{};
-		{
-			fragStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-			fragStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-			fragStageInfo.module = fragModule;
-			fragStageInfo.pName = "main";
-
-			// can specify compile time constants here
-			fragStageInfo.pSpecializationInfo = nullptr;
-		}
-
-		shaderStages = { vertStageInfo, fragStageInfo };
-	}
+	};
 
 	VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
 	{
@@ -811,19 +803,19 @@ uint32_t Application::acquireImage(Frame& frame)
 
 		if (result == VK_SUBOPTIMAL_KHR || result == VK_ERROR_OUT_OF_DATE_KHR)
 			recreateSwapChain();
+		else VK_ASSERT(result);
 	} while (result != VK_SUCCESS);
 	
 	return currentImage;
 }
 
-
-void Application::beginRender(Frame& frame, uint32_t imageIndex)
-{
+void Application::recordCommand(Frame& frame, uint32_t imageIndex)
+{	
 	//reset current fence & current cmd buffer
 	VK_ASSERT(vkResetFences(m_logicalDevice, 1, &frame.m_inFlight));
 	VK_ASSERT(vkResetCommandBuffer(frame.m_cmdBuffer, 0));
 
-	// begin record cmd buffer
+	// begin record cmd buffer 
 	{
 		VkCommandBufferBeginInfo beginInfo{};
 		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -846,10 +838,7 @@ void Application::beginRender(Frame& frame, uint32_t imageIndex)
 
 		vkCmdBeginRenderPass(frame.m_cmdBuffer, &renderpassBeginInfo, VK_SUBPASS_CONTENTS_INLINE);
 	}
-}
 
-void Application::recordRender(Frame& frame)
-{	
 	// bind pipeline
 	vkCmdBindPipeline(frame.m_cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, m_graphicsPipeline);
 
@@ -863,16 +852,16 @@ void Application::recordRender(Frame& frame)
 
 	// draw command
 	vkCmdDraw(frame.m_cmdBuffer, 3, 1, 0, 0);
-}
 
-void Application::submitRender(Frame& frame, uint32_t imageIndex)
-{
 	// end render pass
 	vkCmdEndRenderPass(frame.m_cmdBuffer);
 
 	// end record command
 	VK_ASSERT(vkEndCommandBuffer(frame.m_cmdBuffer));
+}
 
+void Application::submitCommand(Frame& frame, uint32_t imageIndex)
+{
 	// submit command to graphics queue
 	{
 		VkSubmitInfo submitInfo{};
@@ -915,7 +904,6 @@ void Application::submitRender(Frame& frame, uint32_t imageIndex)
 	}
 }
 
-
 void Application::run()
 {
 	uint32_t currentFrame = -1;
@@ -929,14 +917,10 @@ void Application::run()
 		currentFrame = ++currentFrame % m_frames.size();
 		currentImage = acquireImage(m_frames[currentFrame]);
 
-		beginRender(m_frames[currentFrame], currentImage);
-
-		recordRender(m_frames[currentFrame]);
-		
-		submitRender(m_frames[currentFrame], currentImage);
+		recordCommand(m_frames[currentFrame], currentImage);
+		submitCommand(m_frames[currentFrame], currentImage);
 	}
 }
-
 
 void Application::recreateSwapChain()
 {
@@ -947,13 +931,14 @@ void Application::recreateSwapChain()
 		glfwGetFramebufferSize(m_window, &width, &height);
 		glfwWaitEvents();
 	}
-	
+
 	vkDeviceWaitIdle(m_logicalDevice);
 
 	for (auto& image : m_swapchainImages) {
 		vkDestroyFramebuffer(m_logicalDevice, image.m_framebuffer, nullptr);
 		vkDestroyImageView(m_logicalDevice, image.m_view, nullptr);
 	}
+
 	vkDestroyRenderPass(m_logicalDevice, m_renderPass, nullptr);
 
 	vkDestroySwapchainKHR(m_logicalDevice, m_swapchain, nullptr);
