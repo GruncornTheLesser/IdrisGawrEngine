@@ -57,12 +57,12 @@ namespace Gawr::ECS {
 			return m_reg.template pool<U>();
 		}
 
-		template<typename From_U, typename ... Select_Us, typename ... Filter_Ts>
+		template<typename OrderBy_U, typename ... Retrieve_Us, typename ... Filter_Ts>
 		auto view(Filter_Ts...) {
 			return View<
-				From_U, 
-				Retrieve<Select_Us...>, 
-				Retrieve<Select_Us...>::Filter,
+				OrderBy_U,
+				Retrieve<Retrieve_Us...>,
+				Retrieve<Retrieve_Us...>::Filter,
 				Filter_Ts...>{ *this };
 		}
 

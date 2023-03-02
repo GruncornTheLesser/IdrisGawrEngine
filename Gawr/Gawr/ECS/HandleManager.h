@@ -8,14 +8,21 @@ namespace Gawr::ECS {
 		template<bool reverse>
 		class Iterator {
 		public:
-			Iterator(Entity value) : m_value(value) { }
+			Iterator(Entity value, const HandleManager& manager) : m_value(value), m_manager(manager) { }
 
 			auto operator*() {
 				return m_value;
 			}
 			Iterator& operator++() {
 				if constexpr (reverse) --m_value;
-				else				   ++m_value; 
+				else				   ++m_value;
+
+				while (!m_manager.valid(m_value) && m_value < m_manager.m_next)
+				{
+					if constexpr (reverse) --m_value;
+					else				   ++m_value;
+				}
+
 				return *this;
 			}
 			
@@ -27,6 +34,7 @@ namespace Gawr::ECS {
 			};
 		private:
 			Entity m_value;
+			const HandleManager& m_manager;
 		};
 
 	public:
@@ -59,19 +67,19 @@ namespace Gawr::ECS {
 		}
 
 		auto begin() const {
-			return ForwardIterator(0);
+			return ++ForwardIterator(-1, *this);
 		}
 
 		auto end() const {
-			return ForwardIterator(m_next);
+			return ForwardIterator(m_next, *this);
 		}
 
 		auto rbegin() const {
-			return ReverseIterator(m_next - 1);
+			return ++ReverseIterator(m_next, *this);
 		}
 
 		auto rend() const {
-			return ReverseIterator(-1);
+			return ReverseIterator(-1, *this);
 		}
 
 
@@ -84,13 +92,13 @@ namespace Gawr::ECS {
 			void set(size_t index) {
 				size_t i = index / 32, j = index % 32;
 				if (i >= m_data.size()) m_data.resize(i + 1);
-				m_data[i] |= (1 >> j);
+				m_data[i] |= (1 << j);
 			}
 
 			void unset(size_t index) {
 				size_t i = index / 32, j = index % 32;
 				if (i >= m_data.size()) m_data.resize(i + 1);
-				m_data[i] &= ~(1 >> j);
+				m_data[i] &= ~(1 << j);
 			}
 
 			size_t size() const {
@@ -99,7 +107,7 @@ namespace Gawr::ECS {
 
 			bool test(size_t index) const {
 				size_t i = index / 32, j = index % 32;
-				return m_data[i] & (1 >> j);
+				return i < m_data.size() && m_data[i] & (1 << j);
 			}
 
 			std::vector<size_t> m_data;

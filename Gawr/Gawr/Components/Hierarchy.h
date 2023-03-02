@@ -12,11 +12,6 @@ struct Parent {
 #include <glm/gtc/quaternion.hpp>
 
 namespace Transform {
-	struct WorldMatrix {
-		glm::mat4 m_matrix;
-		WorldMatrix(const glm::mat4& m) : m_matrix(m) { }
-		operator const glm::mat4& () const { return m_matrix; }
-	};
 	struct LocalMatrix {
 		glm::mat4 m_matrix;
 		LocalMatrix(const glm::mat4& m) : m_matrix(m) { }
@@ -78,7 +73,7 @@ namespace Mesh {
 	class VAO { };
 }
 
-using Scene = Gawr::ECS::Registry<
+struct Scene : Gawr::ECS::Registry<
 	Gawr::ECS::Entity, // entity pool
 	Parent, 
 	Transform::Position, 
@@ -94,7 +89,7 @@ using Scene = Gawr::ECS::Registry<
 	Mesh::VBO<Mesh::Attrib::Tangent>,
 	Mesh::VBO<Mesh::Attrib::TexCoord>,
 	Mesh::VBO<Mesh::Attrib::MaterialIndex>
->;
+> { };
 
 
 
@@ -127,11 +122,6 @@ void updateHierarchy(Scene& registry) {
 		it++;		
 	}
 }
-
-
-#include <glm.hpp>
-#include <gtc/quaternion.hpp>
-#include <gtx/transform.hpp>
 
 void updateLocalTransform(Scene& registry) {
 	using namespace Gawr::ECS;
@@ -169,9 +159,11 @@ void updateLocalTransform(Scene& registry) {
 void updateRootTransform(Scene& scene) {
 	using namespace Gawr::ECS;
 	using namespace Transform;
-
-	auto pipeline = scene.pipeline<WorldMatrix, const LocalMatrix, const Parent>();
 	
+	auto pipeline = scene.pipeline<WorldMatrix, const LocalMatrix, const Parent>();
+	auto view = pipeline.view<WorldMatrix, WorldMatrix>();
+
+
 	for (auto [world, local] : pipeline.view<WorldMatrix, WorldMatrix, const LocalMatrix>(Exclude<Parent>{})) {
 		world = local;
 	}
@@ -181,7 +173,7 @@ void updateBranchTransform(Scene& scene) {
 	using namespace Gawr::ECS;
 	using namespace Transform;
 
-	auto pipeline = scene.pipeline<WorldMatrix, const LocalMatrix, const Parent, UpdateTag>();
+	auto pipeline = scene.pipeline<const Entity, WorldMatrix, const LocalMatrix, const Parent, UpdateTag>();
 	auto& updatePool = pipeline.pool<UpdateTag>();
 	auto& matPool = pipeline.pool<WorldMatrix>();
 

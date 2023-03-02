@@ -52,9 +52,10 @@ namespace Gawr::ECS {
 		get_return_t emplace(Entity e, Arg_Ts&& ... args) {
 			if (contains(e))
 			{
-				if constexpr (std::is_empty_v<T>) return;
-				
-				return m_components[m_sparse[e]] = T(std::forward<Arg_Ts>(args)...);
+				if constexpr (!std::is_empty_v<T>)
+					return m_components[m_sparse[e]] = T(std::forward<Arg_Ts>(args)...);
+				else
+					return;
 			}
 			else
 			{
@@ -64,9 +65,10 @@ namespace Gawr::ECS {
 				m_sparse[e] = m_packed.size();
 				m_packed.push_back(e);
 
-				if constexpr (std::is_empty_v<T>) return;
-
-				return m_components.emplace_back(args...);
+				if constexpr (!std::is_empty_v<T>) 
+					return m_components.emplace_back(args...);
+				else 
+					return;
 			}
 		}
 

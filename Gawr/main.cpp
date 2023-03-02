@@ -1,9 +1,11 @@
 #include <random>
 #include <iostream>
 
+#include "Gawr/Components/Hierarchy.h"
+
 #include "Graphics.h"
 #include "Gawr/Scene.h"
-#include "Gawr/Components/Hierarchy.h"
+
 
 struct A { int a; };
 struct B { int b; };
@@ -18,17 +20,18 @@ int main()
 	auto pip = reg.pipeline<Entity, A, B, const C>();
 	
 	auto& hm = pip.pool<Entity>();
-	auto& pl = pip.pool<A>();
+	
 
+	auto e0 = hm.create();
 	auto e1 = hm.create();
 	auto e2 = hm.create();
-	auto e3 = hm.create();
-	hm.destroy(e2);
-	auto e4 = hm.create();
-	
+	hm.destroy(e1);
+	//auto e4 = hm.create();
+
+	auto& pl = pip.pool<A>();
+	pl.emplace(e0, 0);
 	pl.emplace(e1, 0);
 	pl.emplace(e2, 0);
-	pl.emplace(e3, 0);
 
 
 
@@ -52,20 +55,8 @@ int main()
 	// iterate over pool
 	for (auto it = pl.begin(), end = pl.end(); it != end; ++it) { }
 	for (auto it = pl.rbegin(), end = pl.rend(); it != end; ++it) { }
-	
-	// iterate over handle manager
-	{
-		auto it = hm.begin(), end = hm.end();
-		while (++it != end && hm.valid(*it)) {}
-	}
-	{
-		auto it = hm.rbegin(), end = hm.rend();
-		while (++it != end && hm.valid(*it)) {}
-	}
-
-
-
-
+	for (auto it = hm.begin(), end = hm.end(); it != end; ++it) { }
+	for (auto it = hm.rbegin(), end = hm.rend(); it != end; ++it) { }
 
 	Application app;
 	app.run();

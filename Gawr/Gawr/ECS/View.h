@@ -45,12 +45,9 @@ namespace Gawr::ECS {
 			};
 
 		private:
-
 			bool valid() {
-				if constexpr (std::is_same_v<OrderBy_T, Entity>) {
-					if (!m_pipeline.pool<const Entity>().valid(*m_current)) return false;
-				}
 				return (Filters_Ts::call(m_pipeline, *m_current) && ...);
+				
 			}
 
 			Pipeline&		m_pipeline;
