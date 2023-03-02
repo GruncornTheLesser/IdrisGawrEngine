@@ -175,10 +175,14 @@
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="Gawr\Core\Config.cpp" />
+    <ClCompile Include="Gawr\Core\Context.cpp" />
     <ClCompile Include="Graphics.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="Config\Display.cfg" />
+    <None Include="Config\Graphics.cfg" />
     <None Include="Resources\shader.frag">
       <FileType>Document</FileType>
     </None>
@@ -187,11 +191,22 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Gawr\ECS.h" />
+    <ClInclude Include="Gawr\Components\Hierarchy.h" />
+    <ClInclude Include="Gawr\Config.h" />
+    <ClInclude Include="Gawr\Core\Application.h" />
+    <ClInclude Include="Gawr\Core\Context.h" />
+    <ClInclude Include="Gawr\Core\Settings.h" />
+    <ClInclude Include="Gawr\Core\Swapchain.h" />
+    <ClInclude Include="Gawr\Core\Vulkan.h" />
+    <ClInclude Include="Gawr\Core\VulkanHandle.h" />
+    <ClInclude Include="Gawr\ECS\AccessLock.h" />
+    <ClInclude Include="Gawr\ECS\Filters.h" />
+    <ClInclude Include="Gawr\Scene.h" />
     <ClInclude Include="Gawr\ECS\Entity.h" />
+    <ClInclude Include="Gawr\ECS\HandleManager.h" />
     <ClInclude Include="Gawr\ECS\View.h" />
     <ClInclude Include="Gawr\ECS\Pipeline.h" />
-    <ClInclude Include="Gawr\ECS\Pool.h" />
+    <ClInclude Include="Gawr\ECS\Storage.h" />
     <ClInclude Include="Gawr\ECS\Registry.h" />
     <ClInclude Include="Graphics.h" />
   </ItemGroup>

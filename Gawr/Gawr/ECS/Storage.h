@@ -1,5 +1,6 @@
 #pragma once
 #include "Entity.h"
+#include "AccessLock.h"
 
 #include <vector>
 #include <shared_mutex>
@@ -7,11 +8,9 @@
 namespace Gawr::ECS {
 	/// @brief a sparse set lookup for entity to component. components are stored in a ordered vector unless component is an empty type.
 	/// @tparam T the component type
+	template<typename ... Reg_Ts>
 	template<typename T>
-	class Pool {
-		template<typename Reg_T, typename ... Us>
-		friend class Pipeline; // for the lock/unlock business
-
+	class Registry<Reg_Ts...>::Storage : public AccessLock {
 		template<typename ... Arg_Ts>
 		using reorder_func_t = void(*)(std::vector<Entity>::iterator, std::vector<Entity>::iterator, Arg_Ts&&...);
 
@@ -20,7 +19,10 @@ namespace Gawr::ECS {
 		static constexpr auto tombstone = static_cast<uint32_t>(-1);
 
 	public:
-		Pool() : m_sparse(8, tombstone) { }
+		using ForwardIterator = std::vector<Entity>::const_reverse_iterator;
+		using ReverseIterator = std::vector<Entity>::const_iterator;
+
+		Storage() : m_sparse(8, tombstone) { }
 
 		size_t size() const {
 			return m_packed.size();
@@ -99,6 +101,8 @@ namespace Gawr::ECS {
 
 		template<typename ... Arg_Ts>
 		void reorder(reorder_func_t<Arg_Ts...> func, Arg_Ts&& ... args) {
+			// when a pair is swapped it will only move the entity so this could break
+			// fine as long as the component is retrieved through entity and not index
 
 			func(m_packed.begin(), m_packed.end(), std::forward<Arg_Ts>(args)...);
 
@@ -128,25 +132,30 @@ namespace Gawr::ECS {
 			}
 		}
 
+		ForwardIterator begin() const {
+			return m_packed.rbegin();
+		}
+
+		ForwardIterator end() const {
+			return m_packed.rend();
+		}
+
+		ReverseIterator rbegin() const {
+			return m_packed.begin();
+		}
+
+		ReverseIterator rend() const {
+			return m_packed.end();
+		}
+
+
+
+
 	private:
-		void lock() { 
-			m_mtx.lock(); 
-		}
-		void unlock() { 
-			m_mtx.unlock();
-		}
-
-		void lock() const { 
-			m_mtx.lock_shared(); 
-		}
-		void unlock() const { 
-			m_mtx.unlock_shared(); 
-		}
-
-		std::vector<T>			m_components;
+		struct ComponentStorage
+			: std::conditional_t<std::is_empty_v<T>, T/*empty type*/, std::vector<T>> {
+		} m_components;
 		std::vector<size_t>		m_sparse;
 		std::vector<Entity>		m_packed;
-
-		mutable std::shared_mutex m_mtx;
-};
+	};
 }

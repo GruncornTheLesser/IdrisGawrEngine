@@ -71,11 +71,9 @@ private:
 
 	uint32_t acquireImage(Frame& frame);
 
-	void beginRender(Frame& frame, uint32_t imageIndex);
-	
-	void recordRender(Frame& frame);
+	void recordCommand(Frame& frame, uint32_t imageIndex);
 
-	void submitRender(Frame& frame, uint32_t imageIndex);
+	void submitCommand(Frame& frame, uint32_t imageIndex);
 
 	void recreateSwapChain();
 
@@ -125,6 +123,15 @@ private:
 
 };
 
+// class Application
+	// Window
+		// GLFWwindow
+		// Surface
+		// 
+	// Graphics
+	
+	
+
 // Context
 	// Instance
 	// Device
@@ -145,10 +152,9 @@ private:
 		// VkImageView
 		// VkFramebuffer
 
-	// Renderer
+	// Frame (x doule or single buffered)
 		// cmdBuffer
 		// fences, semaphores -> etc
-		// 
 
 // ShaderProgram
 	// Pipeline Layout
