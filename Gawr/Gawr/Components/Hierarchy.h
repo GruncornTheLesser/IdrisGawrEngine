@@ -12,6 +12,11 @@ struct Parent {
 #include <glm/gtc/quaternion.hpp>
 
 namespace Transform {
+	struct WorldMatrix {
+		glm::mat4 m_matrix;
+		WorldMatrix(const glm::mat4& m) : m_matrix(m) { }
+		operator const glm::mat4& () const { return m_matrix; }
+	};
 	struct LocalMatrix {
 		glm::mat4 m_matrix;
 		LocalMatrix(const glm::mat4& m) : m_matrix(m) { }
@@ -51,8 +56,6 @@ namespace Transform {
 			return glm::scale(scl.m_scale) * mat.m_matrix;
 		}
 	};
-
-	
 
 	struct UpdateTag {};
 }
@@ -125,6 +128,11 @@ void updateHierarchy(Scene& registry) {
 	}
 }
 
+
+#include <glm.hpp>
+#include <gtc/quaternion.hpp>
+#include <gtx/transform.hpp>
+
 void updateLocalTransform(Scene& registry) {
 	using namespace Gawr::ECS;
 	using namespace Transform;
@@ -177,7 +185,6 @@ void updateBranchTransform(Scene& scene) {
 	auto& updatePool = pipeline.pool<UpdateTag>();
 	auto& matPool = pipeline.pool<WorldMatrix>();
 
-	// sort by parent hierarchy
 	for (auto [curr, parent, local, world] : pipeline.view<Parent, Entity, const Parent, const LocalMatrix, WorldMatrix>())
 	{
 		// if parent updated
