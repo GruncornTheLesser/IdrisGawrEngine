@@ -131,7 +131,7 @@ void updateLocalTransform(Scene& registry) {
 	auto& rotPool = pipeline.pool<const Rotation>();
 	auto& sclPool = pipeline.pool<const Scale>();
 
-	for (auto [e, local] : pipeline.view<UpdateTag, Entity, LocalMatrix>()) {
+	for (auto [e, local] : pipeline.view<Entity, LocalMatrix>(SortBy<UpdateTag>{})) {
 
 		if (sclPool.contains(e))
 		{
@@ -164,7 +164,7 @@ void updateRootTransform(Scene& scene) {
 	auto view = pipeline.view<WorldMatrix, WorldMatrix>();
 
 
-	for (auto [world, local] : pipeline.view<WorldMatrix, WorldMatrix, const LocalMatrix>(Exclude<Parent>{})) {
+	for (auto [world, local] : pipeline.view<WorldMatrix, const LocalMatrix>(SortBy<WorldMatrix>{}, Exclude<Parent>{})) {
 		world = local;
 	}
 }
@@ -177,7 +177,7 @@ void updateBranchTransform(Scene& scene) {
 	auto& updatePool = pipeline.pool<UpdateTag>();
 	auto& matPool = pipeline.pool<WorldMatrix>();
 
-	for (auto [curr, parent, local, world] : pipeline.view<Parent, Entity, const Parent, const LocalMatrix, WorldMatrix>())
+	for (auto [curr, parent, local, world] : pipeline.view<Entity, const Parent, const LocalMatrix, WorldMatrix>(SortBy<Parent>{}))
 	{
 		// if parent updated
 		if (updatePool.contains(parent))

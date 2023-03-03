@@ -24,8 +24,15 @@ namespace Gawr::ECS {
 		}
 	};
 
+	template<typename U>
+	struct SortBy {
+		using type = U;
+	};
+
 	template<typename ... Us>
 	struct Retrieve {
+		static_assert(!(std::is_empty_v<Us> || ...), "Empty types are not stored and cannot be retrieved.");
+
 	private:
 		using U1 = std::tuple_element_t<0, std::tuple<Us...>>;
 	public:
@@ -35,12 +42,8 @@ namespace Gawr::ECS {
 			{
 				if constexpr (std::is_same_v<U, Entity>) 
 					return std::tuple(e);
-
-				else if constexpr (!std::is_empty_v<U>)
-					return std::tuple<U&>{ pip.pool<U>().getComponent(e) };
-
 				else
-					return std::tuple<>{};
+					return std::tuple<U&>{ pip.pool<U>().getComponent(e) };
 			}.operator()<Us>()...);
 		}
 
@@ -59,13 +62,11 @@ namespace Gawr::ECS {
 			return pip.pool<U1>().getComponent(e);
 		}
 
-		
 		template<typename Pip_T>
 		using Return_T = decltype(call<Pip_T>(std::declval<Pip_T&>(), std::declval<Entity>()));
 
-		using Filter = ToFilter<Include, decltype(std::tuple_cat(std::declval<
-			std::conditional_t<std::is_same_v<Entity, Us>, std::tuple<>, std::tuple<Us>>>()...))>::type;
+		using Filter_T = ToFilter<Include, decltype(
+			std::tuple_cat(std::declval<std::conditional_t<std::is_same_v<Entity, Us>, std::tuple<>, std::tuple<Us>>>()...))>::type;
+		using DefaultSortBy_T = SortBy<U1>;
 	};
-
-
 }

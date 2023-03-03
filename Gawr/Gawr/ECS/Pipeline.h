@@ -11,7 +11,9 @@ namespace Gawr::ECS {
 	template<typename ... Ts>
 	class Registry<Reg_Ts...>::Pipeline {
 		template<typename U>
-		using pool_reference_t = std::conditional_t<std::is_const_v<U>, const Pool<std::remove_const_t<U>>&, Pool<std::remove_const_t<U>>&>;
+		using pool_reference_t = std::conditional_t<std::is_const_v<U>, 
+			const Pool<std::remove_const_t<U>>&,	// const pool
+			Pool<U>&>;								// write pool
 
 		template<typename U>
 		static bool constexpr stored_as_non_const = (std::is_same_v<std::remove_const_t<U>, Ts> || ...);
@@ -23,7 +25,7 @@ namespace Gawr::ECS {
 		static bool constexpr stored = (std::is_same_v<std::remove_const_t<U>, std::remove_const_t<Ts>> || ...);
 
 	public:
-		template<typename OrderBy_T, typename Retrieve, typename ... Filters>
+		template<typename Retrieve, typename SortBy, typename ... Filters>
 		class View;
 
 	public:
@@ -57,16 +59,13 @@ namespace Gawr::ECS {
 			return m_reg.template pool<U>();
 		}
 
-		template<typename OrderBy_U, typename ... Retrieve_Us, typename ... Filter_Ts>
-		auto view(Filter_Ts...) {
-			return View<
-				OrderBy_U,
-				Retrieve<Retrieve_Us...>,
-				Retrieve<Retrieve_Us...>::Filter,
-				Filter_Ts...>{ *this };
-		}
-
-
+		template<typename ... RetrieveArgs, typename SortByArg = std::tuple_element_t<0, std::tuple<RetrieveArgs...>>, typename ... Filter_Ts>
+		auto view(SortBy<SortByArg> = SortBy<std::tuple_element_t<0, std::tuple<RetrieveArgs...>>>{}, Filter_Ts...) {
+			using Retrieve_T = Retrieve<RetrieveArgs...>;
+			using SortBy_T = SortBy<SortByArg>;
+			using Filter_T = Retrieve_T::Filter_T;
+			return View<Retrieve_T, SortBy_T, Filter_T, Filter_Ts...>{ *this };
+		} 
 
 	private:
 		Registry& m_reg;

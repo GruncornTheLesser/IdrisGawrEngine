@@ -8,9 +8,9 @@ namespace Gawr::ECS {
 	/// @tparam ...Filter_Ts entities must pass all filter arguments. the first is used to retrieve entities components.
 	template<typename ... Reg_Ts>
 	template<typename ... Pip_Ts>
-	template<typename OrderBy_T, typename Retrieve_T, typename ... Filters_Ts>
+	template<typename Retrieve_T, typename SortBy_T, typename ... Filters_Ts>
 	class Registry<Reg_Ts...>::Pipeline<Pip_Ts...>::View {
-
+		using OrderBy_T = SortBy_T::type;
 	public:
 		template<typename pool_iterator_t>
 		class Iterator {
@@ -21,7 +21,7 @@ namespace Gawr::ECS {
 				while (m_current != m_end && !valid()) ++m_current;
 			}
 
-			Retrieve_T::template Return_T<Pipeline<Pip_Ts...>> operator*() {
+			Retrieve_T::template Return_T<Pipeline> operator*() {
 				return Retrieve_T::call(m_pipeline, *m_current);
 			}
 
@@ -47,7 +47,6 @@ namespace Gawr::ECS {
 		private:
 			bool valid() {
 				return (Filters_Ts::call(m_pipeline, *m_current) && ...);
-				
 			}
 
 			Pipeline&		m_pipeline;

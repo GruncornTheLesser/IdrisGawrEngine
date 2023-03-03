@@ -23,20 +23,6 @@ std::vector<const char*> requiredDeviceExtensions {
 
 Gawr::Core::Graphics::Context::Context(DisplaySettings& settings)
 {
-#pragma region get glfw required instance extensions
-	glfwInit(); // glfw needs to be initiated to get the required extensions
-
-	// get glfw required extensions
-	uint32_t glfwExtensionCount;
-	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-	// remove duplicate extensions
-	std::vector<const char*> extensions(glfwExtensionCount + requiredInstanceExtensions.size());
-	std::set_union(glfwExtensions, glfwExtensions + glfwExtensionCount, requiredInstanceExtensions.begin(), requiredInstanceExtensions.end(), extensions.begin());
-
-	requiredInstanceExtensions = extensions;
-#pragma endregion
-
 #pragma region check instance validation layer support
 #if _DEBUG 
 	uint32_t instanceLayerCount;
@@ -57,6 +43,18 @@ Gawr::Core::Graphics::Context::Context(DisplaySettings& settings)
 #endif
 #pragma endregion
 
+#pragma region get glfw required instance extensions
+	glfwInit(); // glfw needs to be initiated to get the required extensions
+
+	// get glfw required extensions
+	uint32_t glfwExtensionCount;
+	const char** glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+	// remove duplicate extensions
+	std::vector<const char*> extensions(glfwExtensionCount + requiredInstanceExtensions.size());
+	std::set_union(glfwExtensions, glfwExtensions + glfwExtensionCount, requiredInstanceExtensions.begin(), requiredInstanceExtensions.end(), extensions.begin());
+#pragma endregion
+
 #pragma region check instance extension support
 	// check extension supported
 	uint32_t extensionCount;
@@ -65,7 +63,7 @@ Gawr::Core::Graphics::Context::Context(DisplaySettings& settings)
 	std::vector<VkExtensionProperties> availableExtensions(extensionCount);
 	VK_ASSERT(vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, availableExtensions.data()));
 
-	for (const char* extensionName : requiredInstanceExtensions) {
+	for (const char* extensionName : extensions) {
 		auto it = std::find_if(availableExtensions.begin(), availableExtensions.end(), [extensionName](VkExtensionProperties p) {
 			return strcmp(extensionName, p.extensionName) == 0;
 			});
