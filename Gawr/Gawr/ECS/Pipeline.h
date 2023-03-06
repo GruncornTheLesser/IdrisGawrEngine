@@ -3,8 +3,7 @@
 #include "HandleManager.h"
 #include "Filters.h"
 
-namespace Gawr::ECS {
-	
+namespace Gawr::ECS {	
 	/// @brief an access manager for multithreaded applications. 
 	/// @tparam ...Ts the access managed component eg 'const T' or 'T'
 	template<typename...Reg_Ts>
@@ -25,7 +24,7 @@ namespace Gawr::ECS {
 		static bool constexpr stored = (std::is_same_v<std::remove_const_t<U>, std::remove_const_t<Ts>> || ...);
 
 	public:
-		template<typename Retrieve, typename SortBy, typename ... Filters>
+		template<typename Select, typename From, typename Where>
 		class View;
 
 	public:
@@ -59,14 +58,13 @@ namespace Gawr::ECS {
 			return m_reg.template pool<U>();
 		}
 
-		template<typename ... RetrieveArgs, typename SortByArg = std::tuple_element_t<0, std::tuple<RetrieveArgs...>>, typename ... Filter_Ts>
-		auto view(SortBy<SortByArg> = SortBy<std::tuple_element_t<0, std::tuple<RetrieveArgs...>>>{}, Filter_Ts...) {
-			using Retrieve_T = Retrieve<RetrieveArgs...>;
-			using SortBy_T = SortBy<SortByArg>;
-			using Filter_T = Retrieve_T::Filter_T;
-			return View<Retrieve_T, SortBy_T, Filter_T, Filter_Ts...>{ *this };
-		} 
-
+		template<typename Select_T, 
+			typename From_T = DefaultFrom<Select_T>::type, 
+			typename Where_T = DefaultWhere<Select_T, From_T>::type>
+		auto query() 
+		{
+			return View<Select_T, From_T, Where_T>{ *this };
+		}
 	private:
 		Registry& m_reg;
 	};

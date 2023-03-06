@@ -8,9 +8,8 @@ namespace Gawr::ECS {
 	/// @tparam ...Filter_Ts entities must pass all filter arguments. the first is used to retrieve entities components.
 	template<typename ... Reg_Ts>
 	template<typename ... Pip_Ts>
-	template<typename Retrieve_T, typename SortBy_T, typename ... Filters_Ts>
+	template<typename Select_T, typename From_T, typename Where_T>
 	class Registry<Reg_Ts...>::Pipeline<Pip_Ts...>::View {
-		using OrderBy_T = SortBy_T::type;
 	public:
 		template<typename pool_iterator_t>
 		class Iterator {
@@ -21,8 +20,8 @@ namespace Gawr::ECS {
 				while (m_current != m_end && !valid()) ++m_current;
 			}
 
-			Retrieve_T::template Return_T<Pipeline> operator*() {
-				return Retrieve_T::call(m_pipeline, *m_current);
+			Select_T::template Return_T operator*() {
+				return Select_T::retrieve(m_pipeline, *m_current);
 			}
 
 			Iterator& operator++() {
@@ -46,35 +45,35 @@ namespace Gawr::ECS {
 
 		private:
 			bool valid() {
-				return (Filters_Ts::call(m_pipeline, *m_current) && ...);
+				return Where_T::match(m_pipeline, *m_current);
 			}
 
 			Pipeline&		m_pipeline;
 			pool_iterator_t m_current;
 			pool_iterator_t m_end;
 		};
-		using ForwardIterator = Iterator<typename Pool<OrderBy_T>::ForwardIterator>;
-		using ReverseIterator = Iterator<typename Pool<OrderBy_T>::ReverseIterator>;
+		using ForwardIterator = Iterator<typename Pool<typename From_T::type>::ForwardIterator>;
+		using ReverseIterator = Iterator<typename Pool<typename From_T::type>::ReverseIterator>;
 
 		View(Pipeline<Pip_Ts...>& pip) : m_pipeline(pip) { }
 
 		auto begin() const {
-			auto& pool = m_pipeline.pool<const OrderBy_T>();
+			auto& pool = m_pipeline.pool<typename From_T::type>();
 			return ForwardIterator(m_pipeline, pool.begin(), pool.end());
 		}
 
 		auto end() const {
-			auto& pool = m_pipeline.pool<const OrderBy_T>();
+			auto& pool = m_pipeline.pool<typename From_T::type>();
 			return ForwardIterator(m_pipeline, pool.end(), pool.end());
 		}
 
 		auto rbegin() const {
-			auto& pool = m_pipeline.pool<const OrderBy_T>();
+			auto& pool = m_pipeline.pool<typename From_T::type>();
 			return ReverseIterator(m_pipeline, pool.rbegin(), pool.rend());
 		}
 
 		auto rend() const {
-			auto& pool = m_pipeline.pool<const OrderBy_T>();
+			auto& pool = m_pipeline.pool<typename From_T::type>();
 			return ReverseIterator(m_pipeline, pool.rend(), pool.rend());
 		}
 

@@ -20,20 +20,22 @@ namespace Transform {
 	struct WorldMatrix {
 		glm::mat4 m_matrix;
 		WorldMatrix(const glm::mat4& m) : m_matrix(m) { }
-		WorldMatrix(const LocalMatrix& m) : m_matrix(m.m_matrix) { }
 		operator const glm::mat4&() const { return m_matrix; }
 
 		friend glm::mat4 operator *(const WorldMatrix& world, const LocalMatrix& local) {
 			return world.m_matrix * local.m_matrix;
 		}
 	};
+	
 	struct Position {
-		glm::vec3 m_position;
+	public:
 		operator const glm::vec3&() const { return m_position; }
 		operator glm::mat4() const { return glm::translate(m_position); }
 		friend glm::mat4 operator *(const Position& pos, const LocalMatrix& mat) {
 			return glm::translate(pos.m_position) * mat.m_matrix;
 		}
+	private:
+		glm::vec3 m_position;
 	};
 	struct Rotation {
 		glm::quat m_rotation;
@@ -50,6 +52,32 @@ namespace Transform {
 		friend glm::mat4 operator *(const Scale& scl, const LocalMatrix& mat) {
 			return glm::scale(scl.m_scale) * mat.m_matrix;
 		}
+	};
+	
+	struct WorldPosition { 
+	public:
+		WorldPosition(const glm::vec3& position, const glm::vec3& worldScale, const glm::quat& worldRotation) {
+			m_position = worldRotation * (position * worldScale) * glm::conjugate(worldRotation);
+		}
+
+		WorldPosition(const glm::vec3& parentPosition, const glm::vec3& position, const glm::vec3& worldScale, const glm::quat& worldRotation) {
+			m_position = parentPosition + worldRotation * (position * worldScale) * glm::conjugate(worldRotation);
+		}
+
+		operator const glm::vec3& () const { return m_position; }
+		operator glm::mat4() const { return glm::translate(m_position); }
+	private:
+		glm::vec3 m_position;
+	};
+	struct WorldRotation { 
+		glm::quat m_rotation;
+		WorldRotation(const glm::quat& r) : m_rotation(r) { }
+		operator const glm::quat& () const { return m_rotation; }
+	};
+	struct WorldScale {
+		glm::vec3 m_scale;
+		WorldScale(const glm::vec3& scl) : m_scale(scl) { }
+		operator const glm::vec3& () const { return m_scale; }
 	};
 
 	struct UpdateTag {};
@@ -81,15 +109,27 @@ struct Scene : Gawr::ECS::Registry<
 	Transform::Scale, 
 	Transform::WorldMatrix,
 	Transform::LocalMatrix,
-	Transform::UpdateTag,
-	Mesh::VAO,
-	Mesh::VBO<Mesh::Attrib::Index>,
-	Mesh::VBO<Mesh::Attrib::Position>,
-	Mesh::VBO<Mesh::Attrib::Normal>,
-	Mesh::VBO<Mesh::Attrib::Tangent>,
-	Mesh::VBO<Mesh::Attrib::TexCoord>,
-	Mesh::VBO<Mesh::Attrib::MaterialIndex>
+	Transform::UpdateTag
+	//Mesh::VAO,
+	//Mesh::VBO<Mesh::Attrib::Index>,
+	//Mesh::VBO<Mesh::Attrib::Position>,
+	//Mesh::VBO<Mesh::Attrib::Normal>,
+	//Mesh::VBO<Mesh::Attrib::Tangent>,
+	//Mesh::VBO<Mesh::Attrib::TexCoord>,
+	//Mesh::VBO<Mesh::Attrib::MaterialIndex>
 > { };
+
+// ToDo: calculate transform using quaternion where possible to avoid transform calculations???
+// could add an alternative to world matrix and instead use world transform object which would store a position, a quaternion and a scale
+// then we individually transform using quaternion maths which should be cheaper than matrix maths
+// scale = product of scalers
+// rotation = sum of quaternions
+// position = position + rotation * scale * local position
+// then only where needed do you convert that to a matrix?
+
+
+
+
 
 
 
@@ -123,84 +163,179 @@ void updateHierarchy(Scene& registry) {
 	}
 }
 
+
+// matrix technique
 void updateLocalTransform(Scene& registry) {
 	using namespace Gawr::ECS;
 	using namespace Transform;
+	
 	auto pipeline = registry.pipeline<LocalMatrix, const UpdateTag, const Position, const Rotation, const Scale>();
+
 	auto& posPool = pipeline.pool<const Position>();
 	auto& rotPool = pipeline.pool<const Rotation>();
 	auto& sclPool = pipeline.pool<const Scale>();
 
-	for (auto [e, local] : pipeline.view<Entity, LocalMatrix>(SortBy<UpdateTag>{})) {
-
+	// transform updated like this because 
+	for (auto [e, local] : pipeline.query<Select<Entity, LocalMatrix>, From<UpdateTag>>()) 
+	{
 		if (sclPool.contains(e))
 		{
 			local = (glm::mat4)sclPool.getComponent(e);
 
-			if (rotPool.contains(e))
-				local = rotPool.getComponent(e) * local;
-
-			if (posPool.contains(e))
-				local = posPool.getComponent(e) * local;
+			if (rotPool.contains(e)) local = rotPool.getComponent(e) * local;
+			if (posPool.contains(e)) local = posPool.getComponent(e) * local;
 		}
 		else if (rotPool.contains(e))
 		{
 			local = (glm::mat4)rotPool.getComponent(e);
-
-			if (posPool.contains(e))
-				local = posPool.getComponent(e) * local;
+			if (posPool.contains(e)) local = posPool.getComponent(e) * local;
 		}
-		else if (posPool.contains(e)) {
+		else if (posPool.contains(e)) 
+		{
 			local = (glm::mat4)rotPool.getComponent(e);
 		}
 	}
 }
 
-void updateRootTransform(Scene& scene) {
+void updateTransform(Scene& scene) {
 	using namespace Gawr::ECS;
 	using namespace Transform;
 	
-	auto pipeline = scene.pipeline<WorldMatrix, const LocalMatrix, const Parent>();
-	auto view = pipeline.view<WorldMatrix, WorldMatrix>();
-
-
-	for (auto [world, local] : pipeline.view<WorldMatrix, const LocalMatrix>(SortBy<WorldMatrix>{}, Exclude<Parent>{})) {
-		world = local;
+	// update root transform
+	{
+		auto pipeline = scene.pipeline<WorldMatrix, const LocalMatrix, const Parent, const UpdateTag>();
+		for (auto [world, local] : pipeline.query<Select<WorldMatrix, const LocalMatrix>, From<UpdateTag>, Where<AllOf<Parent>>>()) 
+			// explicit Filter
+			// Update tag implies it has Local Matrix and therfore World Matrix therefore no need to add include filter
+		{
+			world = (glm::mat4)local;
+		}
 	}
+
+	// update branch transform
+	{
+		auto pipeline = scene.pipeline<const Entity, WorldMatrix, const LocalMatrix, const Parent, UpdateTag>();
+		auto& updatePool = pipeline.pool<UpdateTag>();
+
+		for (auto [curr, parent, local, world] : pipeline.query<Select<Entity, const Parent, const LocalMatrix, WorldMatrix>>())
+		{
+			// if parent updated
+			if (updatePool.contains(parent))
+			{
+				// add update tag to current
+				if (!updatePool.contains(curr)) updatePool.emplace(curr);
+
+				// update curr by parent transform
+				world = pipeline.pool<WorldMatrix>().getComponent(parent) * local;
+			}
+			// if current updated
+			else if (updatePool.contains(curr))
+			{
+				// if parent has transform
+				if (pipeline.pool<WorldMatrix>().contains(parent))
+					// update curr by parent transform
+					world = pipeline.pool<WorldMatrix>().getComponent(parent) * local;
+				else
+					// copy local matrix
+					world = (glm::mat4)local;
+			}
+		}
+	}
+
 }
 
-void updateBranchTransform(Scene& scene) {
+/*
+// hybrid matrix quat technique
+void updateTransform2(Scene& registry) {
 	using namespace Gawr::ECS;
 	using namespace Transform;
-
-	auto pipeline = scene.pipeline<const Entity, WorldMatrix, const LocalMatrix, const Parent, UpdateTag>();
-	auto& updatePool = pipeline.pool<UpdateTag>();
-	auto& matPool = pipeline.pool<WorldMatrix>();
-
-	for (auto [curr, parent, local, world] : pipeline.view<Entity, const Parent, const LocalMatrix, WorldMatrix>(SortBy<Parent>{}))
+	// propergate update tag
 	{
-		// if parent updated
-		if (updatePool.contains(parent))
+		auto pipeline = registry.pipeline<UpdateTag, const Parent>();
+
+		for (auto [e, parent] : pipeline.view<Entity, const Parent>(Exclude<UpdateTag>{}))
 		{
-			// add update tag to current
-			if (!updatePool.contains(curr)) updatePool.emplace(curr);
-			
-			// update curr by parent transform
-			world = matPool.getComponent(parent) * local;
+			if (pipeline.pool<UpdateTag>().contains(parent))
+				pipeline.pool<UpdateTag>().emplace(e);
 		}
-		// if current updated
-		else if (updatePool.contains(curr))
-		{
-			// if parent has transform
-			if (matPool.contains(parent)) 
-				// update curr by parent transform
-				world = matPool.getComponent(parent) * local;
-			else
-				// copy local matrix
-				world = local;
-		}	
 	}
+
+	auto updateScale = std::thread([&]
+	{
+		auto pipeline = registry.pipeline<const UpdateTag, const Parent, const Scale, WorldScale>();
+		
+		for (auto [local, world] : pipeline.view<
+			Select<const Scale, WorldScale>,
+			From<UpdateTag>,
+			Exclude<Parent>>())
+		{
+			world = (glm::vec3)local;
+		}
+
+		for (auto [e, parent, world] : pipeline.view<
+			Select<Entity, const Parent, WorldScale>,
+			From<Parent>,
+			Include<Parent, WorldScale, UpdateTag>>())
+		{
+			if (pipeline.pool<const Scale>().contains(e))
+			{
+				if (pipeline.pool<const WorldScale>().contains(parent))
+					world = (const glm::vec3&)pipeline.pool<const WorldScale>().getComponent(parent) * 
+							(const glm::vec3&)pipeline.pool<const WorldScale>().getComponent(e);
+				else
+					world = (glm::vec3)pipeline.pool<const WorldScale>().getComponent(e);
+			}
+			else
+			{
+				if (pipeline.pool<const WorldScale>().contains(parent))
+					world = pipeline.pool<const WorldScale>().getComponent(parent);
+				//else
+				//	pipeline.pool<WorldScale>().erase(e); // if current doesnt have rotation and neither does parent
+			}
+		}
+	});
+
+	auto updateRotation = std::thread([&]
+	{
+		auto pipeline = registry.pipeline<const UpdateTag, const Parent, const Rotation, WorldRotation>();
+
+		for (auto [local, world] : pipeline.view<
+			Select<const Rotation, WorldRotation>,
+			From<UpdateTag>,
+			Exclude<Parent>>())
+		{
+			world = (glm::quat)local;
+		}
+
+		for (auto [e, parent, local, world] : pipeline.view<
+			Select<Entity, const Parent, Rotation, WorldRotation>,
+			From<Parent>,
+			Include<UpdateTag>>())
+		{
+			if (pipeline.pool<const WorldRotation>().contains(parent))
+				world = (const glm::quat&)pipeline.pool<const WorldRotation>().getComponent(parent) * (const glm::quat&)local;
+			else
+				world = (glm::quat)local;
+		}
+	});
+	
+	updateScale.join();
+	updateRotation.join();
+
+	auto updatePosition = std::thread([&] {
+		auto pipeline = registry.pipeline<const UpdateTag, const Parent, const Rotation, WorldRotation>();
+
+		for (auto [local, world] : pipeline.view<
+		Select<const Rotation, WorldRotation>,
+			From<UpdateTag>,
+			Exclude<Parent>>())
+		{
+			world = (glm::quat)local;
+		}
+	});
+
+	
+	updatePosition.join();
 }
 
-
-
+*/

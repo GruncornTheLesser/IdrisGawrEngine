@@ -13,7 +13,7 @@ namespace Gawr::ECS {
 		class Storage;
 		
 		template<typename U> 
-		using Pool = std::conditional_t<std::is_same_v<U, Entity>, HandleManager, Storage<U>>;
+		using Pool = std::conditional_t<std::is_same_v<std::remove_const_t<U>, Entity>, HandleManager, Storage<std::remove_const_t<U>>>;
 
 		template<typename ... Us> 
 		class Pipeline;
