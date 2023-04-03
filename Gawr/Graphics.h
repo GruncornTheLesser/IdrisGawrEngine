@@ -1,10 +1,15 @@
 #pragma once
+
 #define GLFW_INCLUDE_VULKAN
 #define VK_USE_PLATFORM_WIN32_KHR
+#define GLFW_EXPOSE_NATIVE_WIN32
 #include <glfw3.h>
+#include <glfw3native.h>
+#include <vulkan/vk_enum_string_helper.h>
+#include <glm/glm.hpp>
+
 #include <string>
 #include <vector>
-#include <glm/glm.hpp>
 #include <array>
 
 class Application {
@@ -49,6 +54,8 @@ private:
 	/*creates a logical device for vulkan functionality*/
 	void createLogicalDevice();
 	
+
+
 	// window
 	/*creates glfw window and surface */
 	void createWindow(int width, int height, const char* title, bool fullscreen = false);
@@ -59,6 +66,9 @@ private:
 	/*creates swapchain Images *REQUIRES SWAPCHAIN* */
 	void createImages();
 
+	
+	
+	
 	// shader
 	/*creates command pool*/
 	void createCommandPool();
@@ -91,13 +101,14 @@ private:
 	VkFormat					m_surfaceFormat;
 	VkExtent2D					m_surfaceExtent;
 
-	// renderer
-	VkRenderPass				m_renderPass;
-	VkSwapchainKHR				m_swapchain;	
 	VkQueue						m_presentQueue;
 	uint32_t					m_presentQueueIndex;
 	VkQueue						m_graphicsQueue;
 	uint32_t					m_graphicsQueueIndex;
+
+	// renderer
+	VkRenderPass				m_renderPass;
+	VkSwapchainKHR				m_swapchain;
 
 	struct SwapchainImage {
 		VkImage			m_image;
@@ -106,7 +117,7 @@ private:
 	};
 	std::vector<SwapchainImage> m_swapchainImages;
 
-	VkCommandPool				m_cmdPool;			// 1 per thread
+	VkCommandPool		m_cmdPool;			// 1 per thread
 
 	// Aim for 15-30 command buffers and 5-10 vkQueueSubmit() calls per frame
 	struct Frame {
@@ -118,8 +129,8 @@ private:
 	std::array<Frame, 2> m_frames;
 
 	// shader program
-	VkPipelineLayout			m_pipelineLayout;
-	VkPipeline					m_graphicsPipeline;
+	VkPipelineLayout	m_pipelineLayout;
+	VkPipeline			m_graphicsPipeline;
 
 };
 
@@ -130,34 +141,3 @@ private:
 		// 
 	// Graphics
 	
-	
-
-// Context
-	// Instance
-	// Device
-	// PhysicalDevice
-	
-// Window
-	// GLFW Window
-	// Surface
-	// Surface Format
-	// Surface Extent
-
-// RenderContext
-	// RenderPass
-	// Swapchain
-	
-	// SwapchainImages
-		// VkImage
-		// VkImageView
-		// VkFramebuffer
-
-	// Frame (x doule or single buffered)
-		// cmdBuffer
-		// fences, semaphores -> etc
-
-// ShaderProgram
-	// Pipeline Layout
-	// Pipeline
-
-// 

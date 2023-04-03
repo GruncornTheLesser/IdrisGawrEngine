@@ -3,11 +3,12 @@
 namespace Gawr::ECS {
 
 	class AccessLock {
-		template<typename ... Reg_Ts>
-		template<typename ... Us>
-		friend class Registry<Reg_Ts...>::Pipeline;
 
-	public:
+		template<typename ... Reg_ts>
+		template<typename ... Pip_ts>
+		friend class Gawr::ECS::Registry<Reg_ts...>::Pipeline;
+	
+	private:
 		void lock() {
 			m_mtx.lock();
 		}

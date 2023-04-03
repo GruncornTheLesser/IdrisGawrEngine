@@ -3,116 +3,165 @@
 #include <set>
 
 namespace Gawr::ECS {
-	template<typename ... Reg_Ts>
-	class Registry<Reg_Ts...>::HandleManager : public AccessLock {
-		template<bool reverse>
-		class Iterator {
+	class HandleManager : public AccessLock {
+	private:
+		struct node { std::ptrdiff_t prev, next; };
+	
+	public:
+		struct Iterator {
 		public:
-			Iterator(Entity value, const HandleManager& manager) : m_value(value), m_manager(manager) { }
+			Iterator(const HandleManager& m, Entity e)
+				: m_node(&m.m_nodes[0] + e), m_curr(e) 
+			{ }
 
-			auto operator*() {
-				return m_value;
+			Entity operator*() {
+				return m_curr;
 			}
 			Iterator& operator++() {
-				if constexpr (reverse) --m_value;
-				else				   ++m_value;
-
-				while (!m_manager.valid(m_value) && m_value < m_manager.m_next)
-				{
-					if constexpr (reverse) --m_value;
-					else				   ++m_value;
+				if (m_node->next == 0) {
+					m_curr = std::numeric_limits<uint32_t>::max();
+					m_node = nullptr;
 				}
-
+				else
+				{
+					m_curr += m_node->next;
+					m_node += m_node->next;
+				}
+				
 				return *this;
 			}
-			
-			friend bool operator==(const Iterator<reverse>& lhs, const Iterator<reverse>& rhs) {
-				return lhs.m_value == rhs.m_value;
-			};
-			friend bool operator!=(const Iterator<reverse>& lhs, const Iterator<reverse>& rhs) {
-				return lhs.m_value != rhs.m_value;
-			};
+			bool operator!=(const Iterator& other) const {
+				return m_curr != other.m_curr;
+			}
 		private:
-			Entity m_value;
-			const HandleManager& m_manager;
+			Entity		m_curr;
+			const node* m_node;
 		};
-
-	public:
-		using ForwardIterator = Iterator<false>;
-		using ReverseIterator = Iterator<true>;
-
+		
 		Entity create() {
-			Entity e;
-			if (!m_queue.empty()) {
-				auto it = m_queue.begin();
-				e = *it;
-				m_queue.erase(it);
+			uint32_t e;
+			node* curr;
+
+			if (m_end != std::numeric_limits<uint32_t>::max())		// if invalid list not empty
+			{
+				// pop off the back of invalid list
+				e = m_end;		
+				curr = &m_nodes[m_end];
+
+				// if invalid list now empty
+				if (curr->next == 0)
+					m_end = std::numeric_limits<uint32_t>::max();	// mark invalid list empty
+				else
+					m_end = curr + curr->next - &m_nodes[0];		// get next in invalid list
 			}
 			else
 			{
-				e = m_next++;
+				// append to sparse array
+				e = m_nodes.size();
+				curr = &m_nodes.emplace_back();
+			}
+			
+			if (m_begin != std::numeric_limits<uint32_t>::max()) // if valid list empty
+			{
+				// [..., begin, curr], curr is new beginning
+				node* begin = &m_nodes[m_begin];
+				begin->prev = curr - begin;		// offset from prev to curr
+				curr->next = begin - curr;		// offset from curr to prev
+			}
+			else
+			{
+				curr->prev = 0;
+				curr->next = 0;
 			}
 
-			m_isValid.set(e);
+			m_begin = curr - &m_nodes[0];	// set begin to curr
 			return e;
 		}
 
-		void destroy(Entity e) {
-			m_queue.emplace(e);
-			m_isValid.unset(e);
+		void erase(Entity e) {
+			node* prev, *curr = &m_nodes[e], *next;
+
+			uint32_t neighbor_case = 0;
+			if (curr->next != 0) neighbor_case |= 1;
+			if (curr->prev != 0) neighbor_case |= 2;
+
+			switch (neighbor_case)
+			{
+			case 0: // [X]
+				m_begin = std::numeric_limits<uint32_t>::max();
+				break;
+
+			case 1: // [X, next, ...]
+				next = curr + curr->next;
+				m_begin = next - &m_nodes[0];
+				next->prev = 0;
+				break;
+
+			case 2: // [..., prev, X]
+				prev = curr + curr->prev;
+				prev->next = 0;
+				break;
+
+			case 3: // [..., prev, X, next, ...]
+				next = curr + curr->next;
+				prev = curr + curr->prev;
+
+				next->prev = prev - next;	// offset from next to prev
+				prev->next = next - prev;	// offset from prev to next
+				break;
+			}
+			
+			if (m_end != std::numeric_limits<uint32_t>::max())	// if invalid list not empty
+				curr->next = &m_nodes[m_end] - curr;			// add link to front of invalid list
+			else
+				curr->next = 0;						
+
+			curr->prev = std::numeric_limits<std::ptrdiff_t>::max();	// mark as invalid
+			m_end = e;													// set as beginning of invalid list
 		}
 
+		void update(Entity e) {
+			if (e == m_begin) // already front of list
+				return; 
+
+			node* curr = &m_nodes[e];
+			node* next = curr + curr->next;
+			node* prev = curr + curr->prev;
+			
+			if (curr->next == 0) {
+				prev = curr + curr->prev;
+				prev->next = 0;
+			}
+			else {
+				next = curr + curr->next;
+				prev = curr + curr->prev;
+
+				next->prev = prev - next;	// offset from next to prev
+				prev->next = next - prev;	// offset from prev to next
+			}
+
+			node* begin = &m_nodes[m_begin];
+			next->prev = curr - begin;		// offset from begin to curr
+			curr->next = begin - curr;		// offset from curr to begin
+
+			m_begin = e;
+		}
+		
 		bool valid(Entity e) const {
-			return m_isValid.test(e);
+			return (e < m_nodes.size() && m_nodes[e].prev != std::numeric_limits<std::ptrdiff_t>::max());
 		}
 
-		auto begin() const {
-			return ++ForwardIterator(-1, *this);
+		Iterator begin() const {
+			return Iterator(*this, m_begin);
 		}
-
-		auto end() const {
-			return ForwardIterator(m_next, *this);
-		}
-
-		auto rbegin() const {
-			return ++ReverseIterator(m_next, *this);
-		}
-
-		auto rend() const {
-			return ReverseIterator(-1, *this);
-		}
-
-
-		size_t size() const {
-			return m_next - m_queue.size();
+		
+		Iterator end() const {
+			return Iterator(*this, std::numeric_limits<uint32_t>::max());
 		}
 
 	private:
-		struct bitset {
-			void set(size_t index) {
-				size_t i = index / 32, j = index % 32;
-				if (i >= m_data.size()) m_data.resize(i + 1);
-				m_data[i] |= (1 << j);
-			}
-
-			void unset(size_t index) {
-				size_t i = index / 32, j = index % 32;
-				if (i >= m_data.size()) m_data.resize(i + 1);
-				m_data[i] &= ~(1 << j);
-			}
-
-			size_t size() const {
-				return 32 * m_data.size();
-			}
-
-			bool test(size_t index) const {
-				size_t i = index / 32, j = index % 32;
-				return i < m_data.size() && m_data[i] & (1 << j);
-			}
-
-			std::vector<size_t> m_data;
-		} m_isValid;
-		std::set<Entity> m_queue;
-		Entity m_next;
+		std::vector<node> m_nodes;
+		uint32_t m_begin{ std::numeric_limits<uint32_t>::max() };
+		uint32_t m_end{ std::numeric_limits<uint32_t>::max() };
 	};
 }

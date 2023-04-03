@@ -43,7 +43,7 @@ namespace Gawr::ECS {
 		}
 
 		~Pipeline() {
-			// unlock all
+			// unlock all, order doesnt matter
 			(m_reg.pool<Ts>().unlock(), ...);
 		}
 
@@ -59,9 +59,9 @@ namespace Gawr::ECS {
 		}
 
 		template<typename Select_T, 
-			typename From_T = DefaultFrom<Select_T>::type, 
-			typename Where_T = DefaultWhere<Select_T, From_T>::type>
-		auto query() 
+			typename From_T = internal::DefaultFrom<Select_T>::type, 
+			typename Where_T = internal::DefaultWhere<Select_T, From_T>::type>
+		auto view()
 		{
 			return View<Select_T, From_T, Where_T>{ *this };
 		}

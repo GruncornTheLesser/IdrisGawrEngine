@@ -180,6 +180,8 @@
   <ItemGroup>
     <ClCompile Include="Gawr\Core\Config.cpp" />
     <ClCompile Include="Gawr\Core\Context.cpp" />
+    <ClCompile Include="Gawr\Core\Swapchain.cpp" />
+    <ClCompile Include="Gawr\Core\Window.cpp" />
     <ClCompile Include="Graphics.cpp" />
     <ClCompile Include="main.cpp" />
   </ItemGroup>
@@ -195,13 +197,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Gawr\Components\Hierarchy.h" />
-    <ClInclude Include="Gawr\Config.h" />
+    <ClInclude Include="Gawr\Core\Config.h" />
     <ClInclude Include="Gawr\Core\Application.h" />
     <ClInclude Include="Gawr\Core\Context.h" />
     <ClInclude Include="Gawr\Core\Settings.h" />
     <ClInclude Include="Gawr\Core\Swapchain.h" />
     <ClInclude Include="Gawr\Core\Vulkan.h" />
     <ClInclude Include="Gawr\Core\VulkanHandle.h" />
+    <ClInclude Include="Gawr\Core\Window.h" />
     <ClInclude Include="Gawr\ECS\AccessLock.h" />
     <ClInclude Include="Gawr\ECS\Filters.h" />
     <ClInclude Include="Gawr\Scene.h" />

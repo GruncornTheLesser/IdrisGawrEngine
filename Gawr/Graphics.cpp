@@ -1,12 +1,4 @@
 #include "Graphics.h"
-
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <glfw3native.h>
-
-#include <vulkan/vk_enum_string_helper.h>
-
-
-
 #include <stdexcept>
 #include <algorithm>
 #include <iterator>
@@ -51,27 +43,28 @@ void Application::Callback::glfwError(int, const char* message)
 Application::Application(const char* name)
 {
 	// context
-	createVkInstance();
+ 	createVkInstance(); 
 	getPhysicalDevice();
 	createLogicalDevice();
 
-	// window
+	// surface requires instance
 	createWindow(800, 600, name);
 
+	// queues require device
 	getQueueFamilies();
 
+	// renderpass require device
 	createRenderPass();
 
+	// swapchain requires device
 	createSwapChain();
-
 	createImages();
 	
+	// cmd pool requires device 
 	createCommandPool();
 
+
 	createFrames(); 
-
-
-
 
 	// shaderProgram
 	createGraphicsPipeline();
@@ -92,7 +85,6 @@ Application::~Application()
 	vkDestroyPipeline(m_logicalDevice, m_graphicsPipeline, nullptr);
 	vkDestroyPipelineLayout(m_logicalDevice, m_pipelineLayout, nullptr);
 
-
 	for (auto& image : m_swapchainImages) {
 		vkDestroyFramebuffer(m_logicalDevice, image.m_framebuffer, nullptr);
 		vkDestroyImageView(m_logicalDevice, image.m_view, nullptr);
@@ -104,7 +96,7 @@ Application::~Application()
 	
 	vkDestroySurfaceKHR(m_instance, m_surface, nullptr);
 	glfwDestroyWindow(m_window);
-
+	
 	vkDestroyDevice(m_logicalDevice, nullptr);
 	vkDestroyInstance(m_instance, nullptr);
 }

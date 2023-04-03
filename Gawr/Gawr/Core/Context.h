@@ -5,17 +5,19 @@
 // ToDo:
 //	 specify which queues to create and how many -> currently one of each
 
-
-namespace Gawr::Core::Graphics {
-	class Context {
+namespace Gawr::Core {
+	struct Context {
 	public:
-		Context(DisplaySettings& settings);
+		Context(const DisplaySettings& settings);
 		~Context();
 
-	private:
 		VKTYPE(VkInstance)			m_instance;
 		VKTYPE(VkPhysicalDevice)	m_physicalDevice;
 		VKTYPE(VkDevice)			m_device;
+
+		int presentFamily;
+		int graphicFamily;
+		int computeFamily;
 	};
 
 }

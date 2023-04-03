@@ -2,27 +2,25 @@
 #include "Entity.h"
 
 namespace Gawr::ECS {
+	// access managed classes
+	template<typename T> 
+	class Storage;
+	class HandleManager;
+
 	template<typename ... Ts>
 	class Registry {
 	public:
-		struct Filters;
-
-		class HandleManager;
-		
-		template<typename U> 
-		class Storage;
-		
-		template<typename U> 
-		using Pool = std::conditional_t<std::is_same_v<std::remove_const_t<U>, Entity>, HandleManager, Storage<std::remove_const_t<U>>>;
-
 		template<typename ... Us> 
 		class Pipeline;
+		
+		template<typename U>
+		using Pool = std::conditional_t<std::is_same_v<std::remove_const_t<U>, Entity>, HandleManager, Storage<std::remove_const_t<U>>>;
 
 	private:
 		using storage_collection_t = std::tuple<HandleManager, Storage<Ts>...>;
 
 		template<typename U>
-		using pool_reference_t = std::conditional_t<std::is_const_v<U>, const Pool<std::remove_const_t<U>>&, Pool<std::remove_const_t<U>>&>;
+		using pool_reference_t = std::conditional_t<std::is_const_v<U>, const Pool<U>&, Pool<U>&>;
 	
 	public:
 		template<typename ... Us>
@@ -39,11 +37,10 @@ namespace Gawr::ECS {
 	private:
 		storage_collection_t m_pools;
 	};
-
-	
 }
 
-#include "Storage.h"
+#include "AccessLock.h"
 #include "HandleManager.h"
+#include "Storage.h"
 #include "Pipeline.h"
 #include "View.h"

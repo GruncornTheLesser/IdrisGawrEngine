@@ -21,7 +21,7 @@ std::vector<const char*> requiredDeviceExtensions {
 	"VK_KHR_swapchain"
 };
 
-Gawr::Core::Graphics::Context::Context(DisplaySettings& settings)
+Gawr::Core::Context::Context(const Gawr::Core::DisplaySettings& settings)
 {
 #pragma region check instance validation layer support
 #if _DEBUG 
@@ -187,7 +187,7 @@ Gawr::Core::Graphics::Context::Context(DisplaySettings& settings)
 #pragma endregion
 }
 
-Gawr::Core::Graphics::Context::~Context()
+Gawr::Core::Context::~Context()
 {
 	vkDestroyDevice(m_device, nullptr);
 	vkDestroyInstance(m_instance, nullptr);

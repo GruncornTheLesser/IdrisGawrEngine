@@ -1,15 +1,8 @@
 #pragma once
 namespace Gawr::ECS {
-
 	namespace internal {
 		template<typename T, typename ... Ts>
 		struct Contains { static constexpr bool value = (std::is_same_v<T, Ts> || ...); };
-
-		template<template<typename...> typename U, typename T>
-		struct TemplateCast;
-
-		template<template<typename ...> typename U, typename ... Ts>
-		struct TemplateCast<U, std::tuple<Ts...>> { using type = U<Ts...>; };
 	}
 
 	template<typename ... Ts>
@@ -61,15 +54,6 @@ namespace Gawr::ECS {
 	};
 
 	template<typename ... Ts>
-	struct AnyOf { 
-		template<typename Pip_T>
-		static bool match(Pip_T& pip, Entity e) {
-			if constexpr (sizeof...(Ts) == 0) return true;
-			return (pip.pool<const Ts>().contains(e) || ...);
-		}
-	};
-
-	template<typename ... Ts>
 	struct NoneOf { 
 		template<typename Pip_T>
 		static bool match(Pip_T& pip, Entity e) {
@@ -78,45 +62,53 @@ namespace Gawr::ECS {
 		}
 	};
 
-	template<typename AllOf, typename AnyOf = AnyOf<>, typename NoneOf = NoneOf<>>
+	template<typename AllOf, typename NoneOf = NoneOf<>>
 	struct Where;
-		
-	template<typename ... AllOfArgs, typename ... AnyOfArgs, typename ... NoneOfArgs>
-	struct Where<AllOf<AllOfArgs...>, AnyOf<AnyOfArgs...>, NoneOf<NoneOfArgs...>> {
-		static_assert((!Contains<AllOfArgs, AnyOfArgs...>::value && ...), "AllOf Filter intersects with AnyOf Filter");
-		static_assert((!Contains<AnyOfArgs, NoneOfArgs...>::value && ...), "AnyOf Filter intersects with NoneOf Filter");
-		static_assert((!Contains<NoneOfArgs, AllOfArgs...>::value && ...), "NoneOf Filter intersects with AllOf Filter");
 
+	template<typename ... AllOfArgs, typename ... NoneOfArgs>
+	struct Where<AllOf<AllOfArgs...>, NoneOf<NoneOfArgs...>> {
+		static_assert((!Contains<NoneOfArgs, AllOfArgs...>::value && ...), "NoneOf Filter intersects with AllOf Filter");
 		template<typename Pip_T>
 		static bool match(Pip_T& pip, Entity e) {
-			return AllOf<AllOfArgs...>::match(pip, e) && 
-				   AnyOf<AnyOfArgs...>::match(pip, e) && 
-				   NoneOf<NoneOfArgs...>::match(pip, e);
+			return AllOf<AllOfArgs...>::match(pip, e) && NoneOf<NoneOfArgs...>::match(pip, e);
 		}
 	};
 
-	template<typename Select_T>
-	struct DefaultFrom;
+	namespace internal {
+		template<typename Select_T>
+		struct DefaultFrom;
 
-	template<typename T>
-	struct DefaultFrom<Select<T>> {
-		using type = From<T>;
-	};
+		template<typename T>
+		struct DefaultFrom<Select<T>> {
+			using type = From<std::remove_const_t<T>>;
+		};
 
-	template<typename T0, typename T1, typename ... Ts>
-	struct DefaultFrom<Select<T0, T1, Ts...>> {
-		using type = From<std::conditional_t<std::is_same_v<T0, Entity>, T1, T0>>;
-	};
+		template<typename T0, typename T1, typename ... Ts>
+		struct DefaultFrom<Select<T0, T1, Ts...>> {
+			using type = From<std::conditional_t<std::is_same_v<T0, Entity>, std::remove_const_t<T1>, std::remove_const_t<T0>>>;
+		};
 
-	template<typename Select_T, typename From_T>
-	struct DefaultWhere;
+		template<typename Select_T, typename From_T, typename result = AllOf<>>
+		struct DefaultAllOf;
 
-	template<typename ... Select_Arg_Ts, typename From_Arg_T>
-	struct DefaultWhere<Select<Select_Arg_Ts...>, From<From_Arg_T>> {
-		using type = Where<typename internal::TemplateCast<AllOf, 
-			decltype(std::tuple_cat(std::declval<std::conditional_t<
-				std::is_same_v<Select_Arg_Ts, Entity> || 
-				std::is_same_v<From_Arg_T, Select_Arg_Ts>, 
-				std::tuple<>, std::tuple<Select_Arg_Ts>>>()...))>::type>;
-	};
+		template<typename From_T, typename ... Res_Ts>
+		struct DefaultAllOf<Select<>, From_T, AllOf<Res_Ts...>> {
+			using type = AllOf<Res_Ts...>;
+		};
+
+		template<typename Select_Arg_T, typename ... Select_Arg_Ts, typename From_Arg_T, typename ... Res_Ts>
+		struct DefaultAllOf<Select<Select_Arg_T, Select_Arg_Ts...>, From<From_Arg_T>, AllOf<Res_Ts...>> {
+		private:
+			using curr = std::remove_const_t<Select_Arg_T>;
+		public:
+			using type = std::conditional_t<std::is_same_v<Entity, curr> || std::is_same_v<From_Arg_T, curr>,
+				DefaultAllOf<Select<Select_Arg_Ts...>, From<From_Arg_T>, AllOf<Res_Ts...>>,
+				DefaultAllOf<Select<Select_Arg_Ts...>, From<From_Arg_T>, AllOf<curr, Res_Ts...>>>::type;
+		};
+
+		template<typename Select_T, typename From_T>
+		struct DefaultWhere {
+			using type = Where<typename DefaultAllOf<Select_T, From_T>::type, NoneOf<>>;
+		};
+	}
 }

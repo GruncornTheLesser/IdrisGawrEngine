@@ -1,16 +1,13 @@
 #pragma once
 
 #ifdef GAWR_VULKAN_IMPLEMENTATION
-	
-#define VKTYPE(TYPE) TYPE
-#define VKENUM(ENUM) ENUM
-
+#define VKALTERNATE(TYPE, EQUIVALENT_TYPE) TYPE
 #else
-
-#define VKTYPE(TYPE) void*
-#define VKENUM(ENUM) int
-
+#define VKALTERNATE(TYPE, EQUIVALENT_TYPE) EQUIVALENT_TYPE
 #endif
+
+#define VKTYPE(TYPE) VKALTERNATE(TYPE, void*)
+#define VKENUM(ENUM) VKALTERNATE(ENUM, int)
 
 #ifdef _DEBUG
 #include <iostream>

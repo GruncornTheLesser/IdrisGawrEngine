@@ -1,5 +1,8 @@
 #pragma once
 #include "VulkanHandle.h"
+#include "Settings.h"
+//#include "Context.h"
+//#include "Window.h"
 
 
 // ToDo: 
@@ -24,7 +27,13 @@
 //				 -> pointer type
 // 
 //		solution -> move all pool functionality to the pipeline
-//
+//				 -> I dont hate this idea however its bad OOP 
+//				 -> but honestly it would reduce alot of boilerplate code 
+//				 -> reduces 'pipeline.pool<A>().emplace()' to 'pipeline.emplace<A>()'
+//				 -> how would it handle the const vs non const?
+//				 -> could do a simple requirement disabling as necessary
+
+
 
 // Designing the Application Structure:
 //		
@@ -39,35 +48,28 @@
 // ShadowCaster<Mode>: Mode = Projection/Mapping
 // 
 
+namespace Gawr::Core {
+	class Application {
+		DisplaySettings settings;
+		//Context context;
+		//Window window;
+
+		Application() : 
+			settings("Config/displaySettings.cfg") 
+			//context(settings), 
+			//window(settings) 
+		{ }
 
 
-class ShaderProgram;
+		// handle window settings config files etc
+		
+			// swapchain x 1 -> queueFamilies x N
+			// queueFamily x 1 -> queue x N
+			// queue x 1 -> cmdPool x N
+			// cmdPool x 1 -> thread x 1
+		
+			// swapchain -> a collection of images and information on how to render to them
 
-class DisplaySettings; // window size, display mode, 
 
-class AppSettings; // app name, graphics mode, use terminal?? idk
-
-class Application {
-	class Graphics {
-		class Context {
-			// instance
-			// physicalDevice
-			// logicalDevice
-		};
-
-		class Swapchain {
-			// swapchain
-			// images
-			// imageviews
-			// framebuffers
-		};
-
-		class Renderer {
-			// commandBuffer
-			// semaphores
-			// fences
-		};
 	};
-
-
-};
+}

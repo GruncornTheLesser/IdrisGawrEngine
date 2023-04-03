@@ -8,15 +8,12 @@
 namespace Gawr::ECS {
 	/// @brief a sparse set lookup for entity to component. components are stored in a ordered vector unless component is an empty type.
 	/// @tparam T the component type
-	template<typename ... Reg_Ts>
 	template<typename T>
-	class Registry<Reg_Ts...>::Storage : public AccessLock {
+	class Storage : public AccessLock {
 		template<typename ... Arg_Ts>
 		using reorder_func_t = void(*)(std::vector<Entity>::iterator, std::vector<Entity>::iterator, Arg_Ts&&...);
 
 		using get_return_t = std::conditional_t<std::is_empty_v<T>, void, T&>;
-
-		static constexpr auto tombstone = static_cast<uint32_t>(-1);
 
 	public:
 		using ForwardIterator = std::vector<Entity>::const_reverse_iterator;
@@ -149,9 +146,6 @@ namespace Gawr::ECS {
 		ReverseIterator rend() const {
 			return m_packed.end();
 		}
-
-
-
 
 	private:
 		struct ComponentStorage
